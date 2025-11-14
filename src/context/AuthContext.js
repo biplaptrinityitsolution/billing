@@ -1,0 +1,111 @@
+// src/context/AuthContext.js
+import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomAlert from '../components/shared/CustomAlert';
+import { loginUserApi } from '../api/auth'; // Import your mock/real login API
+
+export const AuthContext = createContext();
+
+// Alert context for global alert state
+export const AlertContext = createContext();
+
+export function AlertProvider({ children }) {
+  const [alertOptions, setAlertOptions] = useState({ visible: false });
+  const showAlert = useCallback((options) => {
+    setAlertOptions({...options, visible: true });
+  }, []);
+  const hideAlert = useCallback(() => setAlertOptions(a => ({ ...a, visible: false })), []);
+  return (
+    <AlertContext.Provider value={{ showAlert }}>
+      {children}
+      <CustomAlert {...alertOptions} onClose={hideAlert} />
+    </AlertContext.Provider>
+  );
+}
+
+export const AuthProvider = ({ children }) => {
+  const [userToken, setUserToken] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [userName, setUserName] = useState(null);
+  const [isLoading, setIsLoading] = useState(false); // True only for login/logout progress
+  const [isAuthInitializing, setIsAuthInitializing] = useState(true); // True for initial app boot splash
+
+  // Function to handle login process
+  const login = async (phone, password) => {
+    setIsLoading(true);
+    try {
+      const response = await loginUserApi(phone, password);
+      const { token, role, username } = response.data;
+      await AsyncStorage.setItem('userToken', token);
+      await AsyncStorage.setItem('userRole', role);
+      await AsyncStorage.setItem('userName', username);
+      setUserToken(token);
+      setUserRole(role);
+      setUserName(username);
+      return { success: true };
+    } catch (e) {
+      console.error('Login failed:', e.response?.data?.message || e.message);
+      setUserToken(null);
+      setUserRole(null);
+      setUserName(null);
+      return {
+        success: false,
+        error: e.response?.data?.message || 'Something went wrong. Please check your network or credentials.'
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userRole');
+      await AsyncStorage.removeItem('userName');
+      setUserToken(null);
+      setUserRole(null);
+      setUserName(null);
+      // No in-context alert here
+    } catch (e) {
+      console.error('Logout failed:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      const minimumSplashTime = new Promise(resolve => setTimeout(resolve, 4000));
+      let storedToken = null;
+      let storedRole = null;
+      let storedUserName = null;
+      try {
+        await Promise.all([
+          (async () => {
+            storedToken = await AsyncStorage.getItem('userToken');
+            storedRole = await AsyncStorage.getItem('userRole');
+            storedUserName = await AsyncStorage.getItem('userName');
+          })(),
+          minimumSplashTime
+        ]);
+        if (storedToken && storedRole) {
+          setUserToken(storedToken);
+          setUserRole(storedRole);
+          setUserName(storedUserName);
+        }
+      } catch (e) {
+        console.error('Failed to restore session or minimum splash time interrupted:', e);
+      } finally {
+        setIsAuthInitializing(false);
+      }
+    };
+    restoreSession();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ userToken, userRole, userName, isLoading, isAuthInitializing, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
