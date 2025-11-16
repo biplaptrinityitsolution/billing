@@ -1,4 +1,10 @@
-import React, { createContext, useState, useCallback } from 'react';
+import React, { createContext, useState, useCallback, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
+import {getProductsByUserId,getCategoryDetails} from '../api/ProductManage.js';
+
+
+
 
 export const InventoryContext = createContext();
 
@@ -24,6 +30,133 @@ export function InventoryProvider({ children }) {
   const [categories, setCategories] = useState(INIT_CATEGORIES);
   const [employees, setEmployees] = useState(INIT_EMPLOYEES);
   const [products, setProducts] = useState(INIT_PRODUCTS);
+
+
+ 
+
+  // useEffect(() => {
+  //   async function loadUserId() {
+  //     try {
+
+  //       const storedUserId = await AsyncStorage.getItem('userID');
+
+  //       console.log('Stored userID:', storedUserId);
+  //       const reponseProduct = await fetchProducts(storedUserId);
+  //       console.log('Products response:', reponseProduct);
+  //       const reponseCategories = await fetchCategories(storedUserId);
+  //       console.log('Categories response:', reponseCategories);
+        
+  //     } catch (e) {
+  //       console.error('Failed to load userID from AsyncStorage', e);
+  //     }
+  //   }
+  //   loadUserId();
+  // }, []);
+
+
+
+
+  const fetchProducts = useCallback(async (userID) => {
+    try {  
+
+      console.log("id", userID);
+
+      const productResponse = await getProductsByUserId(userID);
+      console.log("product",productResponse);
+
+      
+      if (productResponse?.status === 0) {
+        console.log("HI");
+      } else {
+        Alert.alert(
+          'Failed',
+          `${productResponse?.message}`,
+          [{ text: 'OK' }],
+        );
+      }
+    } catch (err) {
+      if (err?.code === 401) {
+        Alert.alert(
+          'Unauthorised',
+          'Your session has expired. Please log in again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                logout();
+              },
+            },
+          ],
+          { cancelable: false },
+        );
+      } else {
+        Alert.alert(
+          'Something Went Wrong',
+          'Failed to fetch Products details. Please try again after some time',
+          [
+            {
+              text: 'OK',
+              onPress: () => {},
+            },
+          ],
+          { cancelable: false },
+        );
+      }
+    }
+  }, []);
+
+  const fetchCategories = useCallback(async (userID) => {
+    try {
+      const categoriesResponse = await getCategoryDetails(userID);
+      console.log('categoriesResponse:', categoriesResponse);
+
+      
+      if (categoriesResponse?.status === 0) {
+        // Handle successful categories fetch
+      } else {
+        Alert.alert(
+          'Failed',
+          `${categoriesResponse?.message}`,
+          [{ text: 'OK' }],
+        );
+      }
+    } catch (err) {
+      if (err?.code === 401) {
+        Alert.alert(
+          'Unauthorised',
+          'Your session has expired. Please log in again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                logout();
+              },
+            },
+          ],
+          { cancelable: false },
+        );
+      } else {
+        Alert.alert(
+          'Something Went Wrong',
+          'Failed to fetch Categories details. Please try again after some time',
+          [
+            {
+              text: 'OK',
+              onPress: () => {},
+            },
+          ],
+          { cancelable: false },
+        );
+      }
+    }
+  }, []);
+
+  // --- useFocusEffect for reloading UI on screen focus ---
+  
+  
+
+
+
 
   const addCategory = useCallback((data) => {
     setCategories(prev => [
@@ -107,7 +240,9 @@ export function InventoryProvider({ children }) {
       editProduct,
       deleteProduct,
       getProductById,
-      setProducts
+      setProducts,
+      fetchProducts,
+      fetchCategories
     }}>
       {children}
     </InventoryContext.Provider>

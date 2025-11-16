@@ -1,40 +1,44 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const getCategoryDetails = async (userID) => {
-  const token = await AsyncStorage.getItem('userToken');
-
-  const myHeaders = new Headers();
-  myHeaders.append('accept', '*/*');
-  myHeaders.append('Authorization', token);
-
-  const requestOptions = {
-    method: 'GET',
-    headers: myHeaders,
-    redirect: 'follow',
-  };
-
   try {
+    const token = await AsyncStorage.getItem('userToken');
     if (!token) {
       throw { message: 'Unauthorized: No token provided', code: 401 };
     }
 
+    console.log(token,userID);
+
+    const myHeaders = new Headers();
+    myHeaders.append("accept", "*/*");
+    myHeaders.append("Authorization", `Bearer ${token}`);
+
+    console.log("headers", myHeaders)
+
+    const requestOptions = {
+      method: "GET",
+      headers: myHeaders,
+      redirect: "follow"
+    };
+
     const response = await fetch(
       `http://103.150.136.204/EBillingRestAPI/api/v1/user/getCategoryDtls?userID=${userID}`,
-      requestOptions,
+      requestOptions
     );
 
-    if (response?.status === 401) {
+    console.log("resp", response)
+
+    if (response.status === 401) {
       throw { message: 'Unauthorized: No token provided', code: 401 };
     }
 
     if (!response.ok) {
-      throw { message: 'Failed to get Categories List'};
+      throw { message: 'Failed to get Categories List' };
     }
 
-    const result = await response.text();
-
+    const result = await response.json();
+    console.log(result);
     return result;
-
   } catch (error) {
     console.error(error);
     throw error;
@@ -42,11 +46,13 @@ export const getCategoryDetails = async (userID) => {
 };
 
 export const getProductsByUserId = async (userID) => {
+
+
   const token = await AsyncStorage.getItem('userToken');
 
   const myHeaders = new Headers();
   myHeaders.append('accept', '*/*');
-  myHeaders.append('Authorization', token);
+  myHeaders.append("Authorization", `Bearer ${token}`);
 
   const requestOptions = {
     method: 'GET',
@@ -64,6 +70,10 @@ export const getProductsByUserId = async (userID) => {
       requestOptions
     );
 
+    console.log(response)
+
+
+
     if (response?.status === 401) {
       throw { message: 'Unauthorized: No token provided', code: 401 };
     }
@@ -72,7 +82,9 @@ export const getProductsByUserId = async (userID) => {
       throw { message: 'Failed to get Products List',};
     }
 
-    const result = await response.text();
+    const result = await response.json();
+
+    console.log("resultpro",result);
 
     return result;
   } catch (error) {
@@ -125,7 +137,7 @@ export const saveCategory = async ({
       throw { message: 'Failed to save category'};
     }
 
-    const result = await response.text();
+    const result = await response.json();
     return result;
   } catch (error) {
     console.error(error);
@@ -190,7 +202,7 @@ export const saveProduct = async ({
       throw { message: 'Failed to save product' };
     }
 
-    const result = await response.text();
+    const result = await response.json();
     return result;
   } catch (error) {
     console.error(error);

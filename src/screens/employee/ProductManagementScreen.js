@@ -128,11 +128,13 @@ export default function ProductManagementScreen() {
     addProduct,
     editProduct,
     deleteProduct,
+    fetchCategories,
+    fetchProducts
   } = useContext(InventoryContext);
-  const { userName, userProfile, userId, logout } = useContext(AuthContext); // Assuming userProfile exists and has gstBillingType
+  const { userName, userProfile, userID: userId, logout } = useContext(AuthContext); // Assuming userProfile exists and has gstBillingType
   const { t } = useLanguage();
 
-  console.log(categories);
+  console.log(userId,userName);
 
   // If userId is not defined, show alert and logout
   // useEffect(() => {
@@ -169,6 +171,10 @@ export default function ProductManagementScreen() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [categoryName, setCategoryName] = useState('');
   const [categoryColor, setCategoryColor] = useState('#FF6347');
+  const [categoryDescription, setCategoryDescription] = useState('');
+
+  // Category errors state
+  const [categoryErrors, setCategoryErrors] = useState({});
 
   // Product form state
   const [productModalVisible, setProductModalVisible] = useState(false);
@@ -212,6 +218,8 @@ export default function ProductManagementScreen() {
   const resetCategoryForm = () => {
     setCategoryName('');
     setCategoryColor('#FF6347');
+    setCategoryDescription('');
+    setCategoryErrors({});
     setEditingCategory(null);
   };
 
@@ -262,22 +270,33 @@ export default function ProductManagementScreen() {
     );
   };
 
-  // Category operations (unchanged)
+  // Category operations (add description support)
   const handleSaveCategory = () => {
+    let errors = {};
     if (!categoryName.trim()) {
-      Alert.alert('Validation Error', 'Category name is required.');
+      errors.categoryName = 'Category name is required.';
+    }
+    // Optional: Add validations for description if required (here not mandatory)
+
+    if (Object.keys(errors).length > 0) {
+      setCategoryErrors(errors);
+      Alert.alert('Validation Error', 'Please correct the errors in the form.');
       return;
     }
-    if (editingCategory) {
 
-      
+    if (editingCategory) {
       editCategory(editingCategory.id, {
         name: categoryName.trim(),
         color: categoryColor,
+        description: categoryDescription.trim(),
       });
       Alert.alert('Success', 'Category updated successfully!');
     } else {
-      addCategory({ name: categoryName.trim(), color: categoryColor });
+      addCategory({
+        name: categoryName.trim(),
+        color: categoryColor,
+        description: categoryDescription.trim(),
+      });
       Alert.alert('Success', 'Category added successfully!');
     }
     resetCategoryForm();
@@ -288,6 +307,8 @@ export default function ProductManagementScreen() {
     setEditingCategory(category);
     setCategoryName(category.name);
     setCategoryColor(category.color || '#FF6347');
+    setCategoryDescription(category.description || '');
+    setCategoryErrors({});
     setCategoryModalVisible(true);
   };
 
@@ -639,8 +660,8 @@ export default function ProductManagementScreen() {
         try {
           setIsLoading(true);
 
-          // await fetchProducts();
-          // await fetchCategories();
+          await fetchProducts(userId);
+          await fetchCategories(userId);
 
         } catch (error) {
           console.log(error);
@@ -694,6 +715,11 @@ export default function ProductManagementScreen() {
       <View style={styles.categoryContent}>
         <View style={styles.categoryInfo}>
           <Text style={styles.categoryName}>{item.name}</Text>
+          {item.description ? (
+            <Text style={styles.categoryDescription} numberOfLines={2}>
+              {item.description}
+            </Text>
+          ) : null}
           <View style={styles.categoryMeta}>
             <Package size={14} color="#888888" strokeWidth={2} />
             <Text style={styles.categoryCount}>
@@ -919,7 +945,7 @@ export default function ProductManagementScreen() {
             <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
           </TouchableOpacity>
 
-          {/* Category Modal (Original UI preserved) */}
+          {/* Category Modal (now includes description) */}
           <Modal
             visible={categoryModalVisible}
             animationType="slide"
@@ -954,12 +980,35 @@ export default function ProductManagementScreen() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Category Name *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[
+                      styles.input,
+                      categoryErrors.categoryName && styles.inputErrorBorder,
+                    ]}
                     value={categoryName}
-                    onChangeText={setCategoryName}
+                    onChangeText={v => {
+                      setCategoryName(v);
+                      setCategoryErrors(errors => ({ ...errors, categoryName: undefined }));
+                    }}
                     placeholder="Enter category name"
                     placeholderTextColor="#AAAAAA"
                     autoFocus
+                  />
+                  {categoryErrors.categoryName && (
+                    <Text style={styles.inputErrorText}>
+                      {categoryErrors.categoryName}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Description (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={categoryDescription}
+                    onChangeText={v => setCategoryDescription(v)}
+                    placeholder="Enter category description"
+                    placeholderTextColor="#AAAAAA"
+                    multiline
                   />
                 </View>
 
@@ -1500,6 +1549,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1C1C1C',
+    marginBottom: 4,
+  },
+  categoryDescription: {
+    fontSize: 13,
+    color: '#8f8f8f',
     marginBottom: 6,
   },
   categoryMeta: {
@@ -1766,6 +1820,11 @@ const styles = StyleSheet.create({
   selectedColor: {
     borderColor: '#1C1C1C',
     transform: [{ scale: 1.1 }],
+  },
+  categoryDescription: {
+    fontSize: 13,
+    color: '#8f8f8f',
+    marginBottom: 6,
   },
   categorySelector: {
     flexDirection: 'row',

@@ -37,9 +37,13 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await loginUserApi(phone, password);
 
+      console.log("loginUserApi response:", response);
+
       const { token, user } = response?.data || {};
 
       const { userRole: role, userId, userName: username } = user || {};
+
+      console.log("useridlogin",userId);
 
       await AsyncStorage.setItem('userToken', token );
       await AsyncStorage.setItem('userRole', role );
@@ -101,6 +105,7 @@ export const AuthProvider = ({ children }) => {
             storedRole = await AsyncStorage.getItem('userRole');
             storedUserName = await AsyncStorage.getItem('userName');
             storeUserId = await AsyncStorage.getItem('userID');
+            console.log('Restored userID:', storeUserId);
           })(),
           minimumSplashTime
         ]);
@@ -109,6 +114,7 @@ export const AuthProvider = ({ children }) => {
           setUserRole(storedRole);
           setUserName(storedUserName);
           setUserID(storeUserId);
+          
         }
       } catch (e) {
         console.error('Failed to restore session or minimum splash time interrupted:', e);
