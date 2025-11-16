@@ -186,7 +186,7 @@ export default function MainTabs() {
         />
       )}
 
-      {userRole === 'employee' && (
+      {userRole === 'ROLE_USER' && (
         <Tab.Screen
           name="Manage"
           component={ProductManagementScreen}

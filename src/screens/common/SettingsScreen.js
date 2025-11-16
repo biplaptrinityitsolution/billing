@@ -59,6 +59,8 @@ export default function SettingsScreen() {
   // Business Profile Setup modal state
   const [businessProfileModalVisible, setBusinessProfileModalVisible] = useState(false);
 
+  console.log('SettingsScreen userRole:', userRole);
+
   const handleLogout = async () => {
     await logout();
     alertCtx && alertCtx.showAlert && alertCtx.showAlert({

@@ -1,5 +1,5 @@
 // src/screens/employee/ProductManagementScreen.js
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useCallback, useEffect } from 'react'; // Added useEffect
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
   StatusBar,
   Alert,
   Dimensions,
-  Image
+  Image,
+  ActivityIndicator, // Import ActivityIndicator
 } from 'react-native';
 import {
   Plus,
@@ -28,17 +29,31 @@ import {
   TrendingDown,
   Search,
   Upload,
-  ChevronDown // For dropdown indicators
+  ChevronDown, // For dropdown indicators
 } from 'lucide-react-native'; // Removed unused icons: FolderPlus, PackagePlus, ImageIcon
 import { launchImageLibrary } from 'react-native-image-picker';
 import { InventoryContext } from '../../context/InventoryContext';
 import { AuthContext } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useFocusEffect } from '@react-navigation/native'; // Import useFocusEffect
+import {
+  getProductsByUserId,
+  getCategoryDetails,
+  saveProduct,
+  saveCategory,
+} from '../../api/ProductManage';
 
 const { width } = Dimensions.get('window');
 
 // --- Reusable SelectModal Component ---
-const SelectModal = ({ visible, options, value, onSelect, onRequestClose, title }) => (
+const SelectModal = ({
+  visible,
+  options,
+  value,
+  onSelect,
+  onRequestClose,
+  title,
+}) => (
   <Modal
     visible={visible}
     transparent
@@ -51,7 +66,7 @@ const SelectModal = ({ visible, options, value, onSelect, onRequestClose, title 
         <Text style={styles.modalTitle}>{title}</Text>
         <FlatList
           data={options}
-          keyExtractor={(o) => (o.value ? o.value.toString() : o.label)}
+          keyExtractor={o => (o.value ? o.value.toString() : o.label)}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
@@ -69,9 +84,7 @@ const SelectModal = ({ visible, options, value, onSelect, onRequestClose, title 
               >
                 {item.label}
               </Text>
-              {value === item.value && (
-                <View style={styles.modalCheckmark} />
-              )}
+              {value === item.value && <View style={styles.modalCheckmark} />}
             </TouchableOpacity>
           )}
           showsVerticalScrollIndicator={false}
@@ -94,7 +107,6 @@ const UNIT_OPTIONS = [
   { label: 'KG', value: 'KG' },
   { label: 'ML / L', value: 'ML/L' },
   { label: 'PCS', value: 'PCS' },
- 
 ];
 
 // GST Percentage Rates for products
@@ -107,15 +119,47 @@ const GST_PERCENTAGE_RATES = [
 ];
 
 export default function ProductManagementScreen() {
-  const { categories, products, addCategory, editCategory, deleteCategory, addProduct, editProduct, deleteProduct } = useContext(InventoryContext);
-  const { userName, userProfile } = useContext(AuthContext); // Assuming userProfile exists and has gstBillingType
+  const {
+    categories,
+    products,
+    addCategory,
+    editCategory,
+    deleteCategory,
+    addProduct,
+    editProduct,
+    deleteProduct,
+  } = useContext(InventoryContext);
+  const { userName, userProfile, userId, logout } = useContext(AuthContext); // Assuming userProfile exists and has gstBillingType
   const { t } = useLanguage();
+
+  console.log(categories);
+
+  // If userId is not defined, show alert and logout
+  // useEffect(() => {
+  //   if (!userId) {
+  //     console.log('ProductManagementScreen userId:', userId);
+  //     Alert.alert(
+  //       'Session Error',
+  //       'User information is missing or your session has expired. Please login again.',
+  //       [
+  //         {
+  //           text: 'OK',
+  //           onPress: () => {
+  //             logout();
+  //           },
+  //         },
+  //       ],
+  //       { cancelable: false },
+  //     );
+  //   }
+  // }, [userId]);
 
   // Mocking userProfile.gstBillingType for demonstration purposes
   const mockUserProfile = {
     gstBillingType: 2, // 2: Including GST, 3: Excluding GST (if it's 1 or undefined, tax rate logic won't apply)
   };
-  const profileGstBillingType = userProfile?.gstBillingType || mockUserProfile.gstBillingType;
+  const profileGstBillingType =
+    userProfile?.gstBillingType || mockUserProfile.gstBillingType;
 
   // State for active tab (kept as per your original request to not change tabs)
   const [activeTab, setActiveTab] = useState('categories'); // 'categories' or 'products'
@@ -148,9 +192,20 @@ export default function ProductManagementScreen() {
   const [categorySearch, setCategorySearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
 
+  // NEW: Loading state
+  const [isLoading, setIsLoading] = useState(true); // Initial state set to true
+
   const CATEGORY_COLORS = [
-    '#FF6347', '#FF8C42', '#FFC107', '#4CAF50', '#00BCD4',
-    '#2196F3', '#9C27B0', '#E91E63', '#4DD0E1', '#607D8B'
+    '#FF6347',
+    '#FF8C42',
+    '#FFC107',
+    '#4CAF50',
+    '#00BCD4',
+    '#2196F3',
+    '#9C27B0',
+    '#E91E63',
+    '#4DD0E1',
+    '#607D8B',
   ];
 
   // Reset form states
@@ -188,10 +243,13 @@ export default function ProductManagementScreen() {
         quality: 0.8,
         selectionLimit: 1,
       },
-      (response) => {
+      response => {
         if (response.didCancel) return;
         if (response.errorCode) {
-          Alert.alert('Error', 'Failed to pick image: ' + response.errorMessage);
+          Alert.alert(
+            'Error',
+            'Failed to pick image: ' + response.errorMessage,
+          );
         } else if (response.assets && response.assets[0]) {
           const asset = response.assets[0];
           if (isSideImage) {
@@ -200,7 +258,7 @@ export default function ProductManagementScreen() {
             setProductImage(asset.uri);
           }
         }
-      }
+      },
     );
   };
 
@@ -211,7 +269,12 @@ export default function ProductManagementScreen() {
       return;
     }
     if (editingCategory) {
-      editCategory(editingCategory.id, { name: categoryName.trim(), color: categoryColor });
+
+      
+      editCategory(editingCategory.id, {
+        name: categoryName.trim(),
+        color: categoryColor,
+      });
       Alert.alert('Success', 'Category updated successfully!');
     } else {
       addCategory({ name: categoryName.trim(), color: categoryColor });
@@ -221,14 +284,14 @@ export default function ProductManagementScreen() {
     setCategoryModalVisible(false);
   };
 
-  const handleEditCategory = (category) => {
+  const handleEditCategory = category => {
     setEditingCategory(category);
     setCategoryName(category.name);
     setCategoryColor(category.color || '#FF6347');
     setCategoryModalVisible(true);
   };
 
-  const handleDeleteCategory = (category) => {
+  const handleDeleteCategory = category => {
     Alert.alert(
       'Delete Category',
       `Are you sure you want to delete "${category.name}"? This action cannot be undone.`,
@@ -240,9 +303,9 @@ export default function ProductManagementScreen() {
           onPress: () => {
             deleteCategory(category.id);
             Alert.alert('Success', 'Category deleted successfully!');
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -250,9 +313,17 @@ export default function ProductManagementScreen() {
   const validateProductForm = () => {
     const e = {};
     if (!productName.trim()) e.productName = 'Product name is required';
-    if (!productPrice.trim() || isNaN(parseFloat(productPrice)) || parseFloat(productPrice) <= 0)
+    if (
+      !productPrice.trim() ||
+      isNaN(parseFloat(productPrice)) ||
+      parseFloat(productPrice) <= 0
+    )
       e.productPrice = 'Enter a valid positive price';
-    if (!productStock.trim() || isNaN(parseInt(productStock)) || parseInt(productStock) < 0)
+    if (
+      !productStock.trim() ||
+      isNaN(parseInt(productStock)) ||
+      parseInt(productStock) < 0
+    )
       e.productStock = 'Enter a valid non-negative stock quantity';
     if (!productCategory) e.productCategory = 'Select a category';
     // NEW FIELD VALIDATIONS (Quantity REMOVED)
@@ -263,7 +334,12 @@ export default function ProductManagementScreen() {
       if (!productTaxRate) {
         e.productTaxRate = 'Tax Rate is required';
       } else if (productTaxRate === 'Other') {
-        if (!customProductTaxRate.trim() || isNaN(parseFloat(customProductTaxRate)) || parseFloat(customProductTaxRate) < 0 || parseFloat(customProductTaxRate) > 100) {
+        if (
+          !customProductTaxRate.trim() ||
+          isNaN(parseFloat(customProductTaxRate)) ||
+          parseFloat(customProductTaxRate) < 0 ||
+          parseFloat(customProductTaxRate) > 100
+        ) {
           e.customProductTaxRate = 'Enter a valid custom tax rate (0-100)';
         }
       }
@@ -271,7 +347,11 @@ export default function ProductManagementScreen() {
 
     // Discount validation (optional, but if provided, must be 0-100)
     if (productDiscount.trim()) {
-      if (isNaN(parseFloat(productDiscount)) || parseFloat(productDiscount) < 0 || parseFloat(productDiscount) > 100) {
+      if (
+        isNaN(parseFloat(productDiscount)) ||
+        parseFloat(productDiscount) < 0 ||
+        parseFloat(productDiscount) > 100
+      ) {
         e.productDiscount = 'Discount must be between 0-100%';
       }
     }
@@ -289,8 +369,13 @@ export default function ProductManagementScreen() {
     const price = parseFloat(productPrice);
     const stock = parseInt(productStock);
     // New fields parsing (Quantity REMOVED)
-    const taxRateValue = productTaxRate === 'Other' ? parseFloat(customProductTaxRate) : parseFloat(productTaxRate);
-    const discountValue = productDiscount.trim() ? parseFloat(productDiscount) : null; // Save as null if empty
+    const taxRateValue =
+      productTaxRate === 'Other'
+        ? parseFloat(customProductTaxRate)
+        : parseFloat(productTaxRate);
+    const discountValue = productDiscount.trim()
+      ? parseFloat(productDiscount)
+      : null; // Save as null if empty
 
     const productData = {
       name: productName.trim(),
@@ -303,7 +388,12 @@ export default function ProductManagementScreen() {
       sideImage: productSideImage || null,
       // NEW FIELDS added to productData (Quantity REMOVED)
       unit: productUnit,
-      taxRate: profileGstBillingType === 2 ? (isNaN(taxRateValue) ? null : taxRateValue) : null, // Only save taxRate if GST is "Including GST"
+      taxRate:
+        profileGstBillingType === 2
+          ? isNaN(taxRateValue)
+            ? null
+            : taxRateValue
+          : null, // Only save taxRate if GST is "Including GST"
       discount: discountValue,
     };
 
@@ -319,7 +409,7 @@ export default function ProductManagementScreen() {
     setProductModalVisible(false);
   };
 
-  const handleEditProduct = (product) => {
+  const handleEditProduct = product => {
     setEditingProduct(product);
     setProductName(product.name);
     setProductPrice(product.price.toString());
@@ -333,7 +423,9 @@ export default function ProductManagementScreen() {
     // Load NEW FIELDS for editing (Quantity REMOVED)
     setProductUnit(product.unit || '');
     if (product.taxRate !== undefined && product.taxRate !== null) {
-      const foundRate = GST_PERCENTAGE_RATES.find(r => parseFloat(r.value) === product.taxRate);
+      const foundRate = GST_PERCENTAGE_RATES.find(
+        r => parseFloat(r.value) === product.taxRate,
+      );
       if (foundRate) {
         setProductTaxRate(foundRate.value);
         setCustomProductTaxRate('');
@@ -351,7 +443,7 @@ export default function ProductManagementScreen() {
     setProductModalVisible(true);
   };
 
-  const handleDeleteProduct = (product) => {
+  const handleDeleteProduct = product => {
     Alert.alert(
       'Delete Product',
       `Are you sure you want to delete "${product.name}"? This action cannot be undone.`,
@@ -363,9 +455,9 @@ export default function ProductManagementScreen() {
           onPress: () => {
             deleteProduct(product.id);
             Alert.alert('Success', 'Product deleted successfully!');
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -378,17 +470,36 @@ export default function ProductManagementScreen() {
           setCustomProductTaxRate(''); // Clear custom tax rate if not 'Other'
         }
         break;
-      case 'productName': setProductName(value); break;
-      case 'productPrice': setProductPrice(value.replace(/[^0-9.]/g, '')); break;
-      case 'productStock': setProductStock(value.replace(/[^0-9]/g, '')); break;
-      case 'productCategory': setProductCategory(value); break;
-      case 'productDescription': setProductDescription(value); break;
-      case 'productSku': setProductSku(value); break;
+      case 'productName':
+        setProductName(value);
+        break;
+      case 'productPrice':
+        setProductPrice(value.replace(/[^0-9.]/g, ''));
+        break;
+      case 'productStock':
+        setProductStock(value.replace(/[^0-9]/g, ''));
+        break;
+      case 'productCategory':
+        setProductCategory(value);
+        break;
+      case 'productDescription':
+        setProductDescription(value);
+        break;
+      case 'productSku':
+        setProductSku(value);
+        break;
       // NEW FIELD HANDLERS (Quantity REMOVED)
-      case 'productUnit': setProductUnit(value); break;
-      case 'customProductTaxRate': setCustomProductTaxRate(value.replace(/[^0-9.]/g, '')); break;
-      case 'productDiscount': setProductDiscount(value.replace(/[^0-9.]/g, '')); break;
-      default: break;
+      case 'productUnit':
+        setProductUnit(value);
+        break;
+      case 'customProductTaxRate':
+        setCustomProductTaxRate(value.replace(/[^0-9.]/g, ''));
+        break;
+      case 'productDiscount':
+        setProductDiscount(value.replace(/[^0-9.]/g, ''));
+        break;
+      default:
+        break;
     }
     // Clear the specific error for the field being changed
     setProductErrors(prevErrors => ({ ...prevErrors, [key]: undefined }));
@@ -409,36 +520,177 @@ export default function ProductManagementScreen() {
       open: true,
       options,
       key,
-      onChange: (v) => {
-        setSelectModal((modal) => ({ ...modal, open: false }));
+      onChange: v => {
+        setSelectModal(modal => ({ ...modal, open: false }));
         handleProductFieldChange(key, v); // Use the centralized handler
       },
       // Determine display label based on the current value for the given key
-      display: options.find((o) => o.value === (key === 'productCategory' ? productCategory : (key === 'productUnit' ? productUnit : productTaxRate)))?.label || '',
+      display:
+        options.find(
+          o =>
+            o.value ===
+            (key === 'productCategory'
+              ? productCategory
+              : key === 'productUnit'
+              ? productUnit
+              : productTaxRate),
+        )?.label || '',
       title: label,
     });
   };
 
+  // const fetchProducts = async () => {
+  //   try {  
+  //     const productResponse = await getProductsByUserId(userId);
+  //     if (productResponse?.status === 0) {
+  //       // Handle successful product fetch
+  //     } else {
+  //       Alert.alert(
+  //         'Something Went Wrong',
+  //         'Failed to fetch the latest products.',
+  //         [{ text: 'OK' }],
+  //       );
+  //     }
+  //   } catch (err) {
+  //     if (err?.code === 401) {
+  //       Alert.alert(
+  //         'Unauthorised',
+  //         'Your session has expired. Please log in again.',
+  //         [
+  //           {
+  //             text: 'OK',
+  //             onPress: () => {
+  //               logout();
+  //             },
+  //           },
+  //         ],
+  //         { cancelable: false },
+  //       );
+  //     } else {
+  //       Alert.alert(
+  //         'Something Went Wrong',
+  //         'Failed to fetch Products details. Please try again after some time',
+  //         [
+  //           {
+  //             text: 'OK',
+  //             onPress: () => {},
+  //           },
+  //         ],
+  //         { cancelable: false },
+  //       );
+  //     }
+  //   }
+  // };
+
+  // const fetchCategories = async () => {
+  //   try {
+      
+  //     const categoriesResponse = await getCategoryDetails(userId);
+  //     if (categoriesResponse?.status === 0) {
+  //       // Handle successful categories fetch
+  //     } else {
+  //       Alert.alert(
+  //         'Something Went Wrong',
+  //         'Failed to fetch the latest categories.',
+  //         [{ text: 'OK' }],
+  //       );
+  //     }
+  //   } catch (err) {
+  //     if (err?.code === 401) {
+  //       Alert.alert(
+  //         'Unauthorised',
+  //         'Your session has expired. Please log in again.',
+  //         [
+  //           {
+  //             text: 'OK',
+  //             onPress: () => {
+  //               logout();
+  //             },
+  //           },
+  //         ],
+  //         { cancelable: false },
+  //       );
+  //     } else {
+  //       Alert.alert(
+  //         'Something Went Wrong',
+  //         'Failed to fetch Categories details. Please try again after some time',
+  //         [
+  //           {
+  //             text: 'OK',
+  //             onPress: () => {},
+  //           },
+  //         ],
+  //         { cancelable: false },
+  //       );
+  //     }
+  //   } 
+  // };
+
+  // --- useFocusEffect for reloading UI on screen focus ---
+  
+  
+  
+  
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      async function fetchData() {
+        try {
+          setIsLoading(true);
+
+          // await fetchProducts();
+          // await fetchCategories();
+
+        } catch (error) {
+          console.log(error);
+        } finally {
+          if (isActive) {
+            setIsLoading(false);
+          }
+        }
+      }
+
+      fetchData();
+
+      return () => {
+        isActive = false;
+        console.log(
+          'ProductManagementScreen blurred. Cleaning up if necessary.',
+        );
+      };
+    }, []),
+  );
+  // --- End of useFocusEffect ---
+
   // Filter data based on search (correctly applies to the active tab's search state)
   const filteredCategories = categories.filter(cat =>
-    cat.name.toLowerCase().includes(categorySearch.toLowerCase())
+    cat.name.toLowerCase().includes(categorySearch.toLowerCase()),
   );
 
-  const filteredProducts = products.filter(prod =>
-    prod.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    prod.category.toLowerCase().includes(productSearch.toLowerCase()) ||
-    (prod.sku && prod.sku.toLowerCase().includes(productSearch.toLowerCase()))
+  console.log('filteredCategories:', filteredCategories);
+
+  const filteredProducts = products.filter(
+    prod =>
+      prod.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      prod.category.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (prod.sku &&
+        prod.sku.toLowerCase().includes(productSearch.toLowerCase())),
   );
 
-  const getStockStatus = (stock) => {
-    if (stock === 0) return { status: 'Out of Stock', color: '#E74C3C', icon: AlertTriangle };
-    if (stock <= 10) return { status: 'Low Stock', color: '#FFC107', icon: TrendingDown };
+  const getStockStatus = stock => {
+    if (stock === 0)
+      return { status: 'Out of Stock', color: '#E74C3C', icon: AlertTriangle };
+    if (stock <= 10)
+      return { status: 'Low Stock', color: '#FFC107', icon: TrendingDown };
     return { status: 'In Stock', color: '#28A745', icon: TrendingUp };
   };
 
   const CategoryItem = ({ item }) => (
     <View style={styles.categoryCard}>
-      <View style={[styles.categoryColorIndicator, { backgroundColor: item.color }]} />
+      <View
+        style={[styles.categoryColorIndicator, { backgroundColor: item.color }]}
+      />
       <View style={styles.categoryContent}>
         <View style={styles.categoryInfo}>
           <Text style={styles.categoryName}>{item.name}</Text>
@@ -485,11 +737,20 @@ export default function ProductManagementScreen() {
           )}
         </View>
         <View style={styles.productContent}>
-          <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.productName} numberOfLines={1}>
+            {item.name}
+          </Text>
           <Text style={styles.productCategory}>{item.category}</Text>
           <View style={styles.productFooter}>
-            <Text style={styles.productPrice}>₹{item.price !== undefined ? item.price.toFixed(2) : 'N/A'}</Text>
-            <View style={[styles.stockBadge, { backgroundColor: stockInfo.color + '20' }]}>
+            <Text style={styles.productPrice}>
+              ₹{item.price !== undefined ? item.price.toFixed(2) : 'N/A'}
+            </Text>
+            <View
+              style={[
+                styles.stockBadge,
+                { backgroundColor: stockInfo.color + '20' },
+              ]}
+            >
               <StockIcon size={12} color={stockInfo.color} strokeWidth={2.5} />
               <Text style={[styles.stockText, { color: stockInfo.color }]}>
                 {item.stock}
@@ -521,418 +782,601 @@ export default function ProductManagementScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Tab Navigation (RESTORED TO ORIGINAL UI) */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'categories' && styles.activeTab]}
-          onPress={() => setActiveTab('categories')}
-          activeOpacity={0.7}
-        >
-          <Tag size={18} color={activeTab === 'categories' ? '#FFFFFF' : '#888888'} strokeWidth={2} />
-          <Text style={[styles.tabText, activeTab === 'categories' && styles.activeTabText]}>
-            Categories
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'products' && styles.activeTab]}
-          onPress={() => setActiveTab('products')}
-          activeOpacity={0.7}
-        >
-          <Package size={18} color={activeTab === 'products' ? '#FFFFFF' : '#888888'} strokeWidth={2} />
-          <Text style={[styles.tabText, activeTab === 'products' && styles.activeTabText]}>
-            Products
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Bar (RESTORED TO ORIGINAL UI) */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#999999" strokeWidth={2} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={activeTab === 'categories' ? 'Search categories...' : 'Search products...'}
-          placeholderTextColor="#999999"
-          value={activeTab === 'categories' ? categorySearch : productSearch}
-          onChangeText={activeTab === 'categories' ? setCategorySearch : setProductSearch}
-        />
-      </View>
-
-      {/* Content Area (RESTORED TO ORIGINAL UI - shows content based on active tab) */}
-      <View style={styles.content}>
-        {activeTab === 'categories' ? (
-          filteredCategories.length > 0 ? (
-            <FlatList
-              data={filteredCategories}
-              keyExtractor={(item) => item.id}
-              renderItem={CategoryItem}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <Tag size={48} color="#CCCCCC" strokeWidth={1.5} />
-              </View>
-              <Text style={styles.emptyTitle}>No Categories Yet</Text>
-              <Text style={styles.emptyText}>Start by adding your first category</Text>
-            </View>
-          )
-        ) : ( // activeTab === 'products'
-          filteredProducts.length > 0 ? (
-            <FlatList
-              data={filteredProducts}
-              keyExtractor={(item) => item.id}
-              renderItem={ProductItem}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <Package size={48} color="#CCCCCC" strokeWidth={1.5} />
-              </View>
-              <Text style={styles.emptyTitle}>No Products Yet</Text>
-              <Text style={styles.emptyText}>Start by adding your first product</Text>
-            </View>
-          )
-        )}
-      </View>
-
-      {/* Floating Action Button (RESTORED TO ORIGINAL UI - opens modal based on active tab) */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          if (activeTab === 'categories') {
-            resetCategoryForm();
-            setCategoryModalVisible(true);
-          } else { // activeTab === 'products'
-            resetProductForm();
-            setProductModalVisible(true);
-          }
-        }}
-        activeOpacity={0.8}
-      >
-        <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
-      </TouchableOpacity>
-
-      {/* Category Modal (Original UI preserved) */}
-      <Modal
-        visible={categoryModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                resetCategoryForm();
-                setCategoryModalVisible(false);
-              }}
-              style={styles.modalCloseButton}
-            >
-              <X size={24} color="#1C1C1C" strokeWidth={2} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {editingCategory ? 'Edit Category' : 'Add Category'}
-            </Text>
-            <TouchableOpacity
-              onPress={handleSaveCategory}
-              style={styles.modalSaveButton}
-            >
-              <Save size={20} color="#FF6347" strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Category Name *</Text>
-              <TextInput
-                style={styles.input}
-                value={categoryName}
-                onChangeText={setCategoryName}
-                placeholder="Enter category name"
-                placeholderTextColor="#AAAAAA"
-                autoFocus
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Choose Color</Text>
-              <View style={styles.colorGrid}>
-                {CATEGORY_COLORS.map((color, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.colorOption,
-                      { backgroundColor: color },
-                      categoryColor === color && styles.selectedColor
-                    ]}
-                    onPress={() => setCategoryColor(color)}
-                    activeOpacity={0.8}
-                  />
-                ))}
-              </View>
-            </View>
-          </ScrollView>
+      {isLoading ? (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#FF6347" />
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
-      </Modal>
-
-      {/* Product Modal (NEW FIELDS INTEGRATED HERE, UI PRESERVED) */}
-      <Modal
-        visible={productModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
+      ) : (
+        <>
+          {/* Tab Navigation (RESTORED TO ORIGINAL UI) */}
+          <View style={styles.tabContainer}>
             <TouchableOpacity
-              onPress={() => {
-                resetProductForm();
-                setProductModalVisible(false);
-              }}
-              style={styles.modalCloseButton}
+              style={[
+                styles.tab,
+                activeTab === 'categories' && styles.activeTab,
+              ]}
+              onPress={() => setActiveTab('categories')}
+              activeOpacity={0.7}
             >
-              <X size={24} color="#1C1C1C" strokeWidth={2} />
+              <Tag
+                size={18}
+                color={activeTab === 'categories' ? '#FFFFFF' : '#888888'}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'categories' && styles.activeTabText,
+                ]}
+              >
+                Categories
+              </Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              {editingProduct ? 'Edit Product' : 'Add Product'}
-            </Text>
+
             <TouchableOpacity
-              onPress={handleSaveProduct}
-              style={styles.modalSaveButton}
+              style={[styles.tab, activeTab === 'products' && styles.activeTab]}
+              onPress={() => setActiveTab('products')}
+              activeOpacity={0.7}
             >
-              <Save size={20} color="#FF6347" strokeWidth={2} />
+              <Package
+                size={18}
+                color={activeTab === 'products' ? '#FFFFFF' : '#888888'}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === 'products' && styles.activeTabText,
+                ]}
+              >
+                Products
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Product Main Image Upload */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Main Image (Optional)</Text>
-              <TouchableOpacity
-                style={styles.imageUploadContainer}
-                onPress={() => pickProductImage(false)}
-                activeOpacity={0.7}
-              >
-                {productImage ? (
-                  <Image source={{ uri: productImage }} style={styles.uploadedImage} />
-                ) : (
-                  <View style={styles.imageUploadPlaceholder}>
-                    <Upload size={32} color="#CCCCCC" strokeWidth={1.5} />
-                    <Text style={styles.imageUploadText}>Tap to upload main image</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
+          {/* Search Bar (RESTORED TO ORIGINAL UI) */}
+          <View style={styles.searchContainer}>
+            <Search size={20} color="#999999" strokeWidth={2} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={
+                activeTab === 'categories'
+                  ? 'Search categories...'
+                  : 'Search products...'
+              }
+              placeholderTextColor="#999999"
+              value={
+                activeTab === 'categories' ? categorySearch : productSearch
+              }
+              onChangeText={
+                activeTab === 'categories'
+                  ? setCategorySearch
+                  : setProductSearch
+              }
+            />
+          </View>
 
-            {/* Product Side Image Upload */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Side Image (Optional)</Text>
-              <TouchableOpacity
-                style={styles.imageUploadContainer}
-                onPress={() => pickProductImage(true)}
-                activeOpacity={0.7}
-              >
-                {productSideImage ? (
-                  <Image source={{ uri: productSideImage }} style={styles.uploadedImage} />
-                ) : (
-                  <View style={styles.imageUploadPlaceholder}>
-                    <Upload size={32} color="#CCCCCC" strokeWidth={1.5} />
-                    <Text style={styles.imageUploadText}>Tap to upload side image</Text>
+          {/* Content Area (RESTORED TO ORIGINAL UI - shows content based on active tab) */}
+          <View style={styles.content}>
+            {activeTab === 'categories' ? (
+              filteredCategories.length > 0 ? (
+                <FlatList
+                  data={filteredCategories}
+                  keyExtractor={item => item.id}
+                  renderItem={CategoryItem}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.listContent}
+                />
+              ) : (
+                <View style={styles.emptyState}>
+                  <View style={styles.emptyIconContainer}>
+                    <Tag size={48} color="#CCCCCC" strokeWidth={1.5} />
                   </View>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Product Name */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Name *</Text>
-              <TextInput
-                style={[styles.input, productErrors.productName && styles.inputErrorBorder]}
-                value={productName}
-                onChangeText={(v) => handleProductFieldChange('productName', v)}
-                placeholder="Enter product name"
-                placeholderTextColor="#AAAAAA"
+                  <Text style={styles.emptyTitle}>No Categories Yet</Text>
+                  <Text style={styles.emptyText}>
+                    Start by adding your first category
+                  </Text>
+                </View>
+              )
+            ) : // activeTab === 'products'
+            filteredProducts.length > 0 ? (
+              <FlatList
+                data={filteredProducts}
+                keyExtractor={item => item.id}
+                renderItem={ProductItem}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
               />
-              {productErrors.productName && <Text style={styles.inputErrorText}>{productErrors.productName}</Text>}
-            </View>
-
-            {/* Price & Stock */}
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.inputLabel}>Price (₹) *</Text>
-                <TextInput
-                  style={[styles.input, productErrors.productPrice && styles.inputErrorBorder]}
-                  value={productPrice}
-                  onChangeText={(v) => handleProductFieldChange('productPrice', v)}
-                  placeholder="0.00"
-                  placeholderTextColor="#AAAAAA"
-                  keyboardType="decimal-pad"
-                />
-                {productErrors.productPrice && <Text style={styles.inputErrorText}>{productErrors.productPrice}</Text>}
-              </View>
-              <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.inputLabel}>Stock *</Text>
-                <TextInput
-                  style={[styles.input, productErrors.productStock && styles.inputErrorBorder]}
-                  value={productStock}
-                  onChangeText={(v) => handleProductFieldChange('productStock', v)}
-                  placeholder="0"
-                  placeholderTextColor="#AAAAAA"
-                  keyboardType="numeric"
-                />
-                {productErrors.productStock && <Text style={styles.inputErrorText}>{productErrors.productStock}</Text>}
-              </View>
-            </View>
-
-            {/* NEW: Unit (Quantity REMOVED, so Unit now takes full width in this row) */}
-            <View style={styles.inputGroup}> {/* Changed from inputRow to inputGroup as only one field */}
-              <Text style={styles.inputLabel}>Unit *</Text>
-              <TouchableOpacity
-                onPress={() => openProductSelect('productUnit', UNIT_OPTIONS, 'Select Unit')}
-                style={[styles.input, styles.selectInput, productErrors.productUnit && styles.inputErrorBorder]}
-                activeOpacity={0.7}
-              >
-                {/* Text for selected Unit or placeholder */}
-                <Text style={[styles.selectText, !productUnit && styles.selectPlaceholder]}>
-                  {UNIT_OPTIONS.find(o => o.value === productUnit)?.label || 'Select...'}
+            ) : (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIconContainer}>
+                  <Package size={48} color="#CCCCCC" strokeWidth={1.5} />
+                </View>
+                <Text style={styles.emptyTitle}>No Products Yet</Text>
+                <Text style={styles.emptyText}>
+                  Start by adding your first product
                 </Text>
-                <ChevronDown size={18} color="#999999" strokeWidth={2} />
-              </TouchableOpacity>
-              {productErrors.productUnit && <Text style={styles.inputErrorText}>{productErrors.productUnit}</Text>}
-            </View>
-
-
-            {/* Category Selector */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Category *</Text>
-              <View style={[styles.categorySelector, productErrors.productCategory && styles.inputErrorBorder]}>
-                {categories.length > 0 ? (
-                  categories.map((cat) => (
-                    <TouchableOpacity
-                      key={cat.id}
-                      style={[
-                        styles.categoryOption,
-                        productCategory === cat.name && styles.selectedCategoryOption
-                      ]}
-                      onPress={() => handleProductFieldChange('productCategory', cat.name)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
-                      <Text style={[
-                        styles.categoryOptionText,
-                        productCategory === cat.name && styles.selectedCategoryOptionText
-                      ]}>
-                        {cat.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <Text style={styles.noCategoriesText}>
-                    No categories available. Add a category first.
-                  </Text>
-                )}
               </View>
-              {productErrors.productCategory && <Text style={styles.inputErrorText}>{productErrors.productCategory}</Text>}
-            </View>
+            )}
+          </View>
 
-            {/* NEW: Tax Rate - Conditional based on profileGstBillingType */}
-            {profileGstBillingType === 2 && ( // Only show if profile has "Including GST"
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Tax Rate *</Text>
+          {/* Floating Action Button (RESTORED TO ORIGINAL UI - opens modal based on active tab) */}
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => {
+              if (activeTab === 'categories') {
+                resetCategoryForm();
+                setCategoryModalVisible(true);
+              } else {
+                // activeTab === 'products'
+                resetProductForm();
+                setProductModalVisible(true);
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
+          </TouchableOpacity>
+
+          {/* Category Modal (Original UI preserved) */}
+          <Modal
+            visible={categoryModalVisible}
+            animationType="slide"
+            presentationStyle="pageSheet"
+          >
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
                 <TouchableOpacity
-                  onPress={() => openProductSelect('productTaxRate', GST_PERCENTAGE_RATES, 'Select Tax Rate')}
-                  style={[styles.input, styles.selectInput, productErrors.productTaxRate && styles.inputErrorBorder]}
-                  activeOpacity={0.7}
+                  onPress={() => {
+                    resetCategoryForm();
+                    setCategoryModalVisible(false);
+                  }}
+                  style={styles.modalCloseButton}
                 >
-                  <Text style={[styles.selectText, !productTaxRate && styles.selectPlaceholder]}>
-                    {GST_PERCENTAGE_RATES.find(o => o.value === productTaxRate)?.label || 'Select...'}
-                  </Text>
-                  <ChevronDown size={18} color="#999999" strokeWidth={2} />
+                  <X size={24} color="#1C1C1C" strokeWidth={2} />
                 </TouchableOpacity>
-                {productErrors.productTaxRate && <Text style={styles.inputErrorText}>{productErrors.productTaxRate}</Text>}
+                <Text style={styles.modalTitle}>
+                  {editingCategory ? 'Edit Category' : 'Add Category'}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleSaveCategory}
+                  style={styles.modalSaveButton}
+                >
+                  <Save size={20} color="#FF6347" strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
 
-                {/* Conditional Custom Tax Rate Input if "Other" is selected */}
-                {productTaxRate === 'Other' && (
-                  <View style={styles.inputGroup}>
-                    <Text style={[styles.inputLabel, { marginTop: 16 }]}>Custom Tax Rate (%) *</Text>
+              <ScrollView
+                style={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Category Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={categoryName}
+                    onChangeText={setCategoryName}
+                    placeholder="Enter category name"
+                    placeholderTextColor="#AAAAAA"
+                    autoFocus
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Choose Color</Text>
+                  <View style={styles.colorGrid}>
+                    {CATEGORY_COLORS.map((color, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.colorOption,
+                          { backgroundColor: color },
+                          categoryColor === color && styles.selectedColor,
+                        ]}
+                        onPress={() => setCategoryColor(color)}
+                        activeOpacity={0.8}
+                      />
+                    ))}
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </Modal>
+
+          {/* Product Modal (NEW FIELDS INTEGRATED HERE, UI PRESERVED) */}
+          <Modal
+            visible={productModalVisible}
+            animationType="slide"
+            presentationStyle="pageSheet"
+          >
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity
+                  onPress={() => {
+                    resetProductForm();
+                    setProductModalVisible(false);
+                  }}
+                  style={styles.modalCloseButton}
+                >
+                  <X size={24} color="#1C1C1C" strokeWidth={2} />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>
+                  {editingProduct ? 'Edit Product' : 'Add Product'}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleSaveProduct}
+                  style={styles.modalSaveButton}
+                >
+                  <Save size={20} color="#FF6347" strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Product Main Image Upload */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    Product Main Image (Optional)
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.imageUploadContainer}
+                    onPress={() => pickProductImage(false)}
+                    activeOpacity={0.7}
+                  >
+                    {productImage ? (
+                      <Image
+                        source={{ uri: productImage }}
+                        style={styles.uploadedImage}
+                      />
+                    ) : (
+                      <View style={styles.imageUploadPlaceholder}>
+                        <Upload size={32} color="#CCCCCC" strokeWidth={1.5} />
+                        <Text style={styles.imageUploadText}>
+                          Tap to upload main image
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* Product Side Image Upload */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    Product Side Image (Optional)
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.imageUploadContainer}
+                    onPress={() => pickProductImage(true)}
+                    activeOpacity={0.7}
+                  >
+                    {productSideImage ? (
+                      <Image
+                        source={{ uri: productSideImage }}
+                        style={styles.uploadedImage}
+                      />
+                    ) : (
+                      <View style={styles.imageUploadPlaceholder}>
+                        <Upload size={32} color="#CCCCCC" strokeWidth={1.5} />
+                        <Text style={styles.imageUploadText}>
+                          Tap to upload side image
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* Product Name */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Product Name *</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      productErrors.productName && styles.inputErrorBorder,
+                    ]}
+                    value={productName}
+                    onChangeText={v =>
+                      handleProductFieldChange('productName', v)
+                    }
+                    placeholder="Enter product name"
+                    placeholderTextColor="#AAAAAA"
+                  />
+                  {productErrors.productName && (
+                    <Text style={styles.inputErrorText}>
+                      {productErrors.productName}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Price & Stock */}
+                <View style={styles.inputRow}>
+                  <View
+                    style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}
+                  >
+                    <Text style={styles.inputLabel}>Price (₹) *</Text>
                     <TextInput
-                      style={[styles.input, productErrors.customProductTaxRate && styles.inputErrorBorder]}
-                      value={customProductTaxRate}
-                      onChangeText={(v) => handleProductFieldChange('customProductTaxRate', v)}
-                      placeholder="e.g. 10.5"
+                      style={[
+                        styles.input,
+                        productErrors.productPrice && styles.inputErrorBorder,
+                      ]}
+                      value={productPrice}
+                      onChangeText={v =>
+                        handleProductFieldChange('productPrice', v)
+                      }
+                      placeholder="0.00"
+                      placeholderTextColor="#AAAAAA"
+                      keyboardType="decimal-pad"
+                    />
+                    {productErrors.productPrice && (
+                      <Text style={styles.inputErrorText}>
+                        {productErrors.productPrice}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                    <Text style={styles.inputLabel}>Stock *</Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        productErrors.productStock && styles.inputErrorBorder,
+                      ]}
+                      value={productStock}
+                      onChangeText={v =>
+                        handleProductFieldChange('productStock', v)
+                      }
+                      placeholder="0"
                       placeholderTextColor="#AAAAAA"
                       keyboardType="numeric"
                     />
-                    {productErrors.customProductTaxRate && <Text style={styles.inputErrorText}>{productErrors.customProductTaxRate}</Text>}
+                    {productErrors.productStock && (
+                      <Text style={styles.inputErrorText}>
+                        {productErrors.productStock}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* NEW: Unit (Quantity REMOVED, so Unit now takes full width in this row) */}
+                <View style={styles.inputGroup}>
+                  {' '}
+                  {/* Changed from inputRow to inputGroup as only one field */}
+                  <Text style={styles.inputLabel}>Unit *</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      openProductSelect(
+                        'productUnit',
+                        UNIT_OPTIONS,
+                        'Select Unit',
+                      )
+                    }
+                    style={[
+                      styles.input,
+                      styles.selectInput,
+                      productErrors.productUnit && styles.inputErrorBorder,
+                    ]}
+                    activeOpacity={0.7}
+                  >
+                    {/* Text for selected Unit or placeholder */}
+                    <Text
+                      style={[
+                        styles.selectText,
+                        !productUnit && styles.selectPlaceholder,
+                      ]}
+                    >
+                      {UNIT_OPTIONS.find(o => o.value === productUnit)?.label ||
+                        'Select...'}
+                    </Text>
+                    <ChevronDown size={18} color="#999999" strokeWidth={2} />
+                  </TouchableOpacity>
+                  {productErrors.productUnit && (
+                    <Text style={styles.inputErrorText}>
+                      {productErrors.productUnit}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Category Selector */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Category *</Text>
+                  <View
+                    style={[
+                      styles.categorySelector,
+                      productErrors.productCategory && styles.inputErrorBorder,
+                    ]}
+                  >
+                    {categories.length > 0 ? (
+                      categories.map(cat => (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[
+                            styles.categoryOption,
+                            productCategory === cat.name &&
+                              styles.selectedCategoryOption,
+                          ]}
+                          onPress={() =>
+                            handleProductFieldChange(
+                              'productCategory',
+                              cat.name,
+                            )
+                          }
+                          activeOpacity={0.7}
+                        >
+                          <View
+                            style={[
+                              styles.categoryDot,
+                              { backgroundColor: cat.color },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.categoryOptionText,
+                              productCategory === cat.name &&
+                                styles.selectedCategoryOptionText,
+                            ]}
+                          >
+                            {cat.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <Text style={styles.noCategoriesText}>
+                        No categories available. Add a category first.
+                      </Text>
+                    )}
+                  </View>
+                  {productErrors.productCategory && (
+                    <Text style={styles.inputErrorText}>
+                      {productErrors.productCategory}
+                    </Text>
+                  )}
+                </View>
+
+                {/* NEW: Tax Rate - Conditional based on profileGstBillingType */}
+                {profileGstBillingType === 2 && ( // Only show if profile has "Including GST"
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Tax Rate *</Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        openProductSelect(
+                          'productTaxRate',
+                          GST_PERCENTAGE_RATES,
+                          'Select Tax Rate',
+                        )
+                      }
+                      style={[
+                        styles.input,
+                        styles.selectInput,
+                        productErrors.productTaxRate && styles.inputErrorBorder,
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.selectText,
+                          !productTaxRate && styles.selectPlaceholder,
+                        ]}
+                      >
+                        {GST_PERCENTAGE_RATES.find(
+                          o => o.value === productTaxRate,
+                        )?.label || 'Select...'}
+                      </Text>
+                      <ChevronDown size={18} color="#999999" strokeWidth={2} />
+                    </TouchableOpacity>
+                    {productErrors.productTaxRate && (
+                      <Text style={styles.inputErrorText}>
+                        {productErrors.productTaxRate}
+                      </Text>
+                    )}
+
+                    {/* Conditional Custom Tax Rate Input if "Other" is selected */}
+                    {productTaxRate === 'Other' && (
+                      <View style={styles.inputGroup}>
+                        <Text style={[styles.inputLabel, { marginTop: 16 }]}>
+                          Custom Tax Rate (%) *
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            productErrors.customProductTaxRate &&
+                              styles.inputErrorBorder,
+                          ]}
+                          value={customProductTaxRate}
+                          onChangeText={v =>
+                            handleProductFieldChange('customProductTaxRate', v)
+                          }
+                          placeholder="e.g. 10.5"
+                          placeholderTextColor="#AAAAAA"
+                          keyboardType="numeric"
+                        />
+                        {productErrors.customProductTaxRate && (
+                          <Text style={styles.inputErrorText}>
+                            {productErrors.customProductTaxRate}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                   </View>
                 )}
-              </View>
-            )}
 
-            {/* NEW: Discount */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Discount (Optional)</Text>
-              <TextInput
-                style={[styles.input, productErrors.productDiscount && styles.inputErrorBorder]}
-                value={productDiscount}
-                onChangeText={(v) => handleProductFieldChange('productDiscount', v)}
-                placeholder="0-100%"
-                placeholderTextColor="#AAAAAA"
-                keyboardType="numeric"
-              />
-              {productErrors.productDiscount && <Text style={styles.inputErrorText}>{productErrors.productDiscount}</Text>}
+                {/* NEW: Discount */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Discount (Optional)</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      productErrors.productDiscount && styles.inputErrorBorder,
+                    ]}
+                    value={productDiscount}
+                    onChangeText={v =>
+                      handleProductFieldChange('productDiscount', v)
+                    }
+                    placeholder="0-100%"
+                    placeholderTextColor="#AAAAAA"
+                    keyboardType="numeric"
+                  />
+                  {productErrors.productDiscount && (
+                    <Text style={styles.inputErrorText}>
+                      {productErrors.productDiscount}
+                    </Text>
+                  )}
+                </View>
+
+                {/* SKU */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>SKU (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={productSku}
+                    onChangeText={v =>
+                      handleProductFieldChange('productSku', v)
+                    }
+                    placeholder="Auto-generated if empty"
+                    placeholderTextColor="#AAAAAA"
+                  />
+                </View>
+
+                {/* Description */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Description (Optional)</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={productDescription}
+                    onChangeText={v =>
+                      handleProductFieldChange('productDescription', v)
+                    }
+                    placeholder="Product description (optional)"
+                    placeholderTextColor="#AAAAAA"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </View>
+              </ScrollView>
             </View>
+          </Modal>
 
-            {/* SKU */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>SKU (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={productSku}
-                onChangeText={(v) => handleProductFieldChange('productSku', v)}
-                placeholder="Auto-generated if empty"
-                placeholderTextColor="#AAAAAA"
-              />
-            </View>
-
-            {/* Description */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Description (Optional)</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={productDescription}
-                onChangeText={(v) => handleProductFieldChange('productDescription', v)}
-                placeholder="Product description (optional)"
-                placeholderTextColor="#AAAAAA"
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Common Select Modal for product fields */}
-      <SelectModal
-        visible={selectModal.open}
-        options={selectModal.options}
-        // Determine current value based on the key
-        value={
-          selectModal.key === 'productCategory'
-            ? productCategory
-            : selectModal.key === 'productUnit'
-            ? productUnit
-            : productTaxRate
-        }
-        onSelect={(v) => {
-          selectModal.onChange && selectModal.onChange(v);
-        }}
-        onRequestClose={() => setSelectModal((m) => ({ ...m, open: false }))}
-        title={selectModal.title}
-      />
+          {/* Common Select Modal for product fields */}
+          <SelectModal
+            visible={selectModal.open}
+            options={selectModal.options}
+            // Determine current value based on the key
+            value={
+              selectModal.key === 'productCategory'
+                ? productCategory
+                : selectModal.key === 'productUnit'
+                ? productUnit
+                : productTaxRate
+            }
+            onSelect={v => {
+              selectModal.onChange && selectModal.onChange(v);
+            }}
+            onRequestClose={() => setSelectModal(m => ({ ...m, open: false }))}
+            title={selectModal.title}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -943,6 +1387,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F8F8',
     // Adjusted paddingTop to account for status bar and tab bar
     paddingTop: 110,
+  },
+  // NEW: Loading overlay styles
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject, // Covers the entire screen
+    backgroundColor: 'rgba(255, 255, 255, 0.9)', // Semi-transparent white background
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100, // Ensure it's above other content
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333333',
   },
   header: {
     paddingHorizontal: 20,
@@ -1248,7 +1706,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 4,
   },
-  selectInput: { // Style for TouchableOpacity acting as a select input
+  selectInput: {
+    // Style for TouchableOpacity acting as a select input
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

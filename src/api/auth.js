@@ -44,17 +44,21 @@ export const loginUserApi = async (phone, password) => {
 
   try {
     const response = await fetch(
-      'http://103.150.136.204/EBillingRestAPI/auth/authentication',
+      "http://103.150.136.204/EBillingRestAPI/api/v1/auth/authentication",
       requestOptions,
     );
 
+    
+
     if (!response.ok) {
-      throw new Error('Login failed');
+      throw { message: 'Login failed' };
     }
 
     const result = await response.json();
 
-    return result?.data;
+    console.log('Registration API Response:', result);
+
+    return result;
   } catch (error) {
     throw error;
   }
@@ -64,13 +68,15 @@ export const registerOwnerApi = async payload => {
   // const url = `${API_BASE_USER_URL}/saveUserAuth`
 
   try {
-    const { name, mobileNumber, password } = payload || {};
-
+    
+    const { name, phone, password } = payload || {};
     const raw = JSON.stringify({
-      user_name: mobileNumber || '',
+      user_name: phone || '',
       user_password: password || '',
       user_full_name: name || '',
     });
+
+    console.log("raw", raw);
 
     const myHeaders = new Headers();
     myHeaders.append('accept', '*/*');
@@ -84,15 +90,21 @@ export const registerOwnerApi = async payload => {
     };
 
     const response = await fetch(
-      'http://103.150.136.204/EBillingRestAPI/user/saveUserAuth',
+      "http://103.150.136.204/EBillingRestAPI/api/v1/auth/saveUserAuth",
       requestOptions,
     );
 
+    console.log('Registration API Response:', response);
+
     if (!response.ok) {
-      throw new Error(resultJson?.message || 'Registration failed');
+      throw new Error({ message: 'Login failed'  || 'Registration failed'});  
     }
     const resultJson = await response.json();
-    return resultJson?.data;
+
+    console.log("resuljson",resultJson);
+
+    return resultJson;
+
   } catch (error) {
     throw error;
   }

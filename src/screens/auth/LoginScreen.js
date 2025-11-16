@@ -16,7 +16,15 @@ import {
   ScrollView,
 } from 'react-native';
 import * as Animatable from 'react-native-animatable';
-import { Lock, Eye, EyeOff, ArrowRight, Wallet, User, Phone } from 'lucide-react-native';
+import {
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Wallet,
+  User,
+  Phone,
+} from 'lucide-react-native';
 import { AuthContext } from '../../context/AuthContext.js';
 import { forgotPasswordApi, registerOwnerApi } from '../../api/auth';
 import { AlertContext } from '../../context/AuthContext';
@@ -45,95 +53,113 @@ export default function LoginScreen() {
     setName('');
   }, [currentFlow]);
 
-  const isPhone = (input) => PHONE_REGEX.test(input);
+  const isPhone = input => PHONE_REGEX.test(input);
 
   const handleAuthAction = async () => {
     Keyboard.dismiss();
 
     if (currentFlow === 'signUp') {
       if (!name) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Missing Information',
-          message: 'Please enter your name.',
-          type: 'warning',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Missing Information',
+            message: 'Please enter your name.',
+            type: 'warning',
+          });
         return;
       }
 
       if (!phone) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Missing Information',
-          message: 'Please enter your phone number.',
-          type: 'warning',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Missing Information',
+            message: 'Please enter your phone number.',
+            type: 'warning',
+          });
         return;
       }
 
       if (!isPhone(phone)) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Invalid Phone Number',
-          message: 'Please enter a valid 10-digit phone number.',
-          type: 'error',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Invalid Phone Number',
+            message: 'Please enter a valid 10-digit phone number.',
+            type: 'error',
+          });
         return;
       }
 
       if (!password) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Missing Information',
-          message: 'Please enter your password.',
-          type: 'warning',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Missing Information',
+            message: 'Please enter your password.',
+            type: 'warning',
+          });
         return;
       }
 
       if (!confirmPassword) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Missing Information',
-          message: 'Please enter confirm password.',
-          type: 'warning',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Missing Information',
+            message: 'Please enter confirm password.',
+            type: 'warning',
+          });
         return;
       }
 
       if (password !== confirmPassword) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Password Mismatch',
-          message: 'Password and confirm password do not match.',
-          type: 'error',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Password Mismatch',
+            message: 'Password and confirm password do not match.',
+            type: 'error',
+          });
         return;
       }
     } else {
       // login
-      if (!phone || !password) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Input Required',
-          message: 'Please enter both phone number and password.',
-          type: 'warning',
-        });
+      if(!phone || !password) {
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Input Required',
+            message: 'Please enter both phone number and password.',
+            type: 'warning',
+          });
         return;
       }
       if (!isPhone(phone)) {
-        alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-          title: 'Invalid Phone Number',
-          message: 'Please enter a valid 10-digit phone number.',
-          type: 'error',
-        });
+        alertCtx &&
+          alertCtx.showAlert &&
+          alertCtx.showAlert({
+            title: 'Invalid Phone Number',
+            message: 'Please enter a valid 10-digit phone number.',
+            type: 'error',
+          });
         return;
       }
     }
-
     setLocalIsLoading(true);
     try {
-      if (currentFlow === 'login') {
+      if (currentFlow === 'login'){
         const loginResult = await login(phone, password);
+        console.log('Login Result:', loginResult);
         if (!loginResult.success) {
-          alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-            title: 'Login Failed',
-            message: loginResult.error,
-            type: 'error',
-          });
+          alertCtx &&
+            alertCtx.showAlert &&
+            alertCtx.showAlert({
+              title: 'Login Failed',
+              message: loginResult.error,
+              type: 'error',
+            });
         }
       } else {
         // Sign Up API call
@@ -143,19 +169,36 @@ export default function LoginScreen() {
             phone,
             password,
           };
+          
           const res = await registerOwnerApi(payload);
-          alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-            title: 'Registration Successful',
-            message: res.data?.message || 'Account created successfully.',
-            type: 'success',
-          });
-          setCurrentFlow('login');
+          if (res?.status === 0) {
+            alertCtx &&
+              alertCtx.showAlert &&
+              alertCtx.showAlert({
+                title: 'Registration Successful',
+                message: 'Account created successfully.',
+                type: 'success',
+              });
+            setCurrentFlow('login');
+          } else {
+            alertCtx &&
+              alertCtx.showAlert &&
+              alertCtx.showAlert({
+                title: 'Something Went Wrong',
+                message: res?.message || 'Something went wrong during registration. Please try again.',
+                type: 'error',
+              });
+          }
         } catch (e) {
-          alertCtx && alertCtx.showAlert && alertCtx.showAlert({
-            title: 'Registration Failed',
-            message: e.response?.data?.message || 'Unable to register. Please try again.',
-            type: 'error',
-          });
+          alertCtx &&
+            alertCtx.showAlert &&
+            alertCtx.showAlert({
+              title: 'Registration Failed',
+              message:
+                e.response?.data?.message ||
+                'Unable to register. Please try again.',
+              type: 'error',
+            });
         }
       }
     } catch (error) {
@@ -168,21 +211,35 @@ export default function LoginScreen() {
   const handleForgotPassword = async () => {
     Keyboard.dismiss();
     if (!phone) {
-      Alert.alert('Phone Required', 'Please enter your phone number to receive a password reset link.');
+      Alert.alert(
+        'Phone Required',
+        'Please enter your phone number to receive a password reset link.',
+      );
       return;
     }
     if (!isPhone(phone)) {
-      Alert.alert('Invalid Phone Number', 'Please enter a valid 10-digit phone number.');
+      Alert.alert(
+        'Invalid Phone Number',
+        'Please enter a valid 10-digit phone number.',
+      );
       return;
     }
 
     setLocalIsLoading(true);
     try {
       const response = await forgotPasswordApi(phone);
-      Alert.alert('Password Reset', response.data.message || "If this phone number is registered you will receive reset instructions.");
+      Alert.alert(
+        'Password Reset',
+        response.data.message ||
+          'If this phone number is registered you will receive reset instructions.',
+      );
       setCurrentFlow('login');
     } catch (error) {
-      Alert.alert('Reset Failed', error.response?.data?.message || 'Could not send reset link. Please try again.');
+      Alert.alert(
+        'Reset Failed',
+        error.response?.data?.message ||
+          'Could not send reset link. Please try again.',
+      );
       console.error('Forgot password failed:', error);
     } finally {
       setLocalIsLoading(false);
@@ -190,15 +247,20 @@ export default function LoginScreen() {
   };
 
   const renderAuthForm = () => (
-    <Animatable.View animation="fadeInUp" duration={800} delay={400} style={styles.formContainer}>
+    <Animatable.View
+      animation="fadeInUp"
+      duration={800}
+      delay={400}
+      style={styles.formContainer}
+    >
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>
-          {currentFlow === 'login' ? 'Welcome Back' : 'Create Account'}
+          {currentFlow === 'login' ? <Text>Welcome Back</Text> : <Text>Create Account</Text>}
         </Text>
         <Text style={styles.formSubtitle}>
           {currentFlow === 'login'
-            ? 'Enter your credentials to continue'
-            : 'Sign up to get started'}
+            ? <Text>Enter your credentials to continue</Text>
+            : <Text>Sign up to get started</Text>}
         </Text>
 
         {/* Name Input - Only for Sign Up */}
@@ -287,8 +349,8 @@ export default function LoginScreen() {
         )}
 
         {currentFlow === 'login' && (
-          <TouchableOpacity 
-            style={styles.forgotPasswordButton} 
+          <TouchableOpacity
+            style={styles.forgotPasswordButton}
             onPress={() => setCurrentFlow('forgotPassword')}
           >
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
@@ -296,7 +358,10 @@ export default function LoginScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.actionButton, localIsLoading && styles.actionButtonDisabled]}
+          style={[
+            styles.actionButton,
+            localIsLoading && styles.actionButtonDisabled,
+          ]}
           onPress={handleAuthAction}
           disabled={localIsLoading}
           activeOpacity={0.8}
@@ -306,7 +371,7 @@ export default function LoginScreen() {
           ) : (
             <View style={styles.actionButtonContent}>
               <Text style={styles.actionButtonText}>
-                {currentFlow === 'login' ? 'Login' : 'Sign Up'}
+                {currentFlow === 'login' ? <Text>Login</Text> : <Text>Sign Up</Text>}
               </Text>
               <ArrowRight size={20} color="#fff" strokeWidth={2.5} />
             </View>
@@ -316,11 +381,17 @@ export default function LoginScreen() {
         {/* Toggle Login/SignUp */}
         <View style={styles.toggleContainer}>
           <Text style={styles.toggleText}>
-            {currentFlow === 'login' ? "Don't have an account?" : "Already have an account?"}
+            {currentFlow === 'login'
+              ? <Text>{"Don't have an account?"}</Text>
+              : <Text>Already have an account?</Text>}
           </Text>
-          <TouchableOpacity onPress={() => setCurrentFlow(currentFlow === 'login' ? 'signUp' : 'login')}>
+          <TouchableOpacity
+            onPress={() =>
+              setCurrentFlow(currentFlow === 'login' ? 'signUp' : 'login')
+            }
+          >
             <Text style={styles.toggleLink}>
-              {currentFlow === 'login' ? 'Sign Up' : 'Login'}
+              {currentFlow === 'login' ? <Text>Sign Up</Text> : <Text>Login</Text>}
             </Text>
           </TouchableOpacity>
         </View>
@@ -329,11 +400,16 @@ export default function LoginScreen() {
   );
 
   const renderForgotPasswordForm = () => (
-    <Animatable.View animation="fadeInUp" duration={800} delay={400} style={styles.formContainer}>
+    <Animatable.View
+      animation="fadeInUp"
+      duration={800}
+      delay={400}
+      style={styles.formContainer}
+    >
       <View style={styles.formCard}>
-        <Text style={styles.formTitle}>Reset Password</Text>
+        <Text style={styles.formTitle}><Text>Reset Password</Text></Text>
         <Text style={styles.formSubtitle}>
-          Enter your phone number to receive a password reset link
+          <Text>Enter your phone number to receive a password reset link</Text>
         </Text>
 
         {/* Phone Input */}
@@ -358,7 +434,10 @@ export default function LoginScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.actionButton, localIsLoading && styles.actionButtonDisabled]}
+          style={[
+            styles.actionButton,
+            localIsLoading && styles.actionButtonDisabled,
+          ]}
           onPress={handleForgotPassword}
           disabled={localIsLoading}
           activeOpacity={0.8}
@@ -367,17 +446,17 @@ export default function LoginScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <View style={styles.actionButtonContent}>
-              <Text style={styles.actionButtonText}>Send Reset Link</Text>
+              <Text style={styles.actionButtonText}><Text>Send Reset Link</Text></Text>
               <ArrowRight size={20} color="#fff" strokeWidth={2.5} />
             </View>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.backToLoginButton} 
+        <TouchableOpacity
+          style={styles.backToLoginButton}
           onPress={() => setCurrentFlow('login')}
         >
-          <Text style={styles.backToLoginText}>Back to Login</Text>
+          <Text style={styles.backToLoginText}><Text>Back to Login</Text></Text>
         </TouchableOpacity>
       </View>
     </Animatable.View>
@@ -402,16 +481,22 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
           >
             {/* Logo Section */}
-            <Animatable.View animation="fadeInDown" duration={1000} style={styles.logoContainer}>
+            <Animatable.View
+              animation="fadeInDown"
+              duration={1000}
+              style={styles.logoContainer}
+            >
               <View style={styles.logoCircle}>
                 <Wallet size={48} color="#2C3E50" strokeWidth={2} />
               </View>
-              <Text style={styles.title}>Trinity Billing</Text>
-              <Text style={styles.subtitle}>Easy Online Payment</Text>
+              <Text style={styles.title}><Text>Trinity Billing</Text></Text>
+              <Text style={styles.subtitle}><Text>Easy Online Payment</Text></Text>
             </Animatable.View>
 
             {/* Form Section */}
-            {currentFlow === 'forgotPassword' ? renderForgotPasswordForm() : renderAuthForm()}
+            {currentFlow === 'forgotPassword'
+              ? renderForgotPasswordForm()
+              : renderAuthForm()}
 
             {/* Bottom Illustration */}
             <Animatable.View
@@ -420,7 +505,7 @@ export default function LoginScreen() {
               delay={800}
               style={styles.bottomIllustration}
             >
-              <Text style={styles.illustrationEmoji}>💳</Text>
+              <Text style={styles.illustrationEmoji}><Text>💳</Text></Text>
             </Animatable.View>
           </ScrollView>
         </KeyboardAvoidingView>

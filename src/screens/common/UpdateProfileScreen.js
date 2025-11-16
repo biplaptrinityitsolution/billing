@@ -12,9 +12,10 @@ import {
   Platform,
   StatusBar,
   SafeAreaView,
-  Switch, // Import Switch component
+  Switch,
+  Alert, // For displaying error messages
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker'; //
+import { launchImageLibrary } from 'react-native-image-picker';
 import {
   User,
   Briefcase,
@@ -29,10 +30,11 @@ import {
   Building2,
   Save,
   RotateCcw,
-  Tag, // For GST Rate icon
+  Tag,
 } from 'lucide-react-native';
 import { AuthContext } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { saveUserProfileApi } from '../../api/SettingManagegManage';
 
 // Business Type Options
 const BUSINESSES = [
@@ -53,11 +55,11 @@ const GST_REGTYPES = [
   { label: 'E-Commerce Operator', value: 6 },
 ];
 
-// GST Billing Options (renamed from GST_BILLING for clarity in UI logic)
+// GST Billing Options
 const GST_BILLING_TYPES = [
-  { label: 'Including GST', value: 2 }, // Tax values are added in the product’s price
-  { label: 'Excluding GST', value: 3 }, // Tax value is added on the bill
-  { label: 'No GST', value: 1 }, // Added for completeness, if 'Do you have GST?' is false, this is implicitly selected.
+  { label: 'Including GST', value: 2 },
+  { label: 'Excluding GST', value: 3 },
+  { label: 'No GST', value: 1 },
 ];
 
 // Discount Base Options
@@ -88,15 +90,15 @@ const fieldIcons = {
   shopName: <Home size={20} color="#FF6347" />,
   shopAddress: <MapPin size={20} color="#FF6347" />,
   billingMobile: <Phone size={20} color="#FF6347" />,
-  gstBillingType: <Briefcase size={20} color="#FF6347" />, // Renamed from gstType
-  gstRate: <Tag size={20} color="#FF6347" />, // New icon for GST Rate
+  gstBillingType: <Briefcase size={20} color="#FF6347" />,
+  gstRate: <Tag size={20} color="#FF6347" />,
   billDiscountBase: <Percent size={20} color="#FF6347" />,
   billDiscountRate: <Percent size={20} color="#FF6347" />,
 };
 
 export default function UpdateProfileScreen() {
-  const { userId, userMobile } = useContext(AuthContext);
-  const { t } = useLanguage(); // Assuming t function is for translations
+  const { userId, userMobile, logout } = useContext(AuthContext);
+  const { t } = useLanguage();
 
   const [form, setForm] = useState({
     userId: userId || '',
@@ -104,20 +106,20 @@ export default function UpdateProfileScreen() {
     ownerMobile: userMobile || '',
     ownerEmail: '',
     businessType: '',
-    hasGst: false, // New field for GST toggle
+    hasGst: false,
     gstin: '',
     gstStateCode: '',
     gstRegType: '',
-    gstBillingType: '', // Renamed from gstType
-    gstRate: '', // New field for GST Rate selection
-    customGstRate: '', // New field for custom GST rate when 'Other' is selected
+    gstBillingType: '',
+    gstRate: '',
+    customGstRate: '',
     panNo: '',
     tradeLicenseNo: '',
     shopName: '',
-    shopAddress: '', // Now optional
-    billingMobile: '', // Now mandatory
-    billDiscountBase: '', // Now optional
-    billDiscountRate: '', // Conditionally mandatory
+    shopAddress: '',
+    billingMobile: '',
+    billDiscountBase: '',
+    billDiscountRate: '',
     logo: null,
   });
   const [errors, setErrors] = useState({});
@@ -135,15 +137,13 @@ export default function UpdateProfileScreen() {
     if (!form.ownerName) e.ownerName = 'Owner Name is required';
     if (!form.ownerMobile || !/^\d{10,15}$/.test(form.ownerMobile))
       e.ownerMobile = 'Enter a valid mobile number (10-15 digits)';
-    if (
-      form.ownerEmail &&
-      !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.ownerEmail)
-    )
+    if (form.ownerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.ownerEmail))
       e.ownerEmail = 'Invalid email format';
     if (!form.businessType) e.businessType = 'Select business type';
     if (!form.shopName) e.shopName = 'Shop name is required';
-    if (!form.billingMobile || !/^\d{10,15}$/.test(form.billingMobile)) // Billing Mobile is now mandatory
-      e.billingMobile = 'Billing Mobile Number is required and must be 10-15 digits';
+    if (!form.billingMobile || !/^\d{10,15}$/.test(form.billingMobile))
+      e.billingMobile =
+        'Billing Mobile Number is required and must be 10-15 digits';
 
     // GST Specific Validations
     if (form.hasGst) {
@@ -153,27 +153,25 @@ export default function UpdateProfileScreen() {
         e.gstin = 'GSTIN must be 15 characters';
 
       // If 'Excluding GST' is selected, GST Rate is mandatory
-      if (form.gstBillingType === 3) { // 3 is 'Excluding GST'
+      if (form.gstBillingType === 3) {
         if (!form.gstRate) {
           e.gstRate = 'GST Rate is required';
         } else if (form.gstRate === 'Other') {
-          if (!form.customGstRate || isNaN(form.customGstRate) || parseFloat(form.customGstRate) < 0 || parseFloat(form.customGstRate) > 100) {
+          if (
+            !form.customGstRate ||
+            isNaN(form.customGstRate) ||
+            parseFloat(form.customGstRate) < 0 ||
+            parseFloat(form.customGstRate) > 100
+          ) {
             e.customGstRate = 'Enter a valid custom GST rate (0-100)';
           }
         }
       }
-    } else {
-      // If hasGst is false, clear any GST related errors that might persist
-      // and ensure GST-related fields are considered valid or ignored.
-      // This is important if user toggles off GST after filling.
-      // We don't need to explicitly clear form values here, as they won't be submitted
-      // or validated if hasGst is false.
     }
 
     if (form.panNo && !/^[A-Z]{5}\d{4}[A-Z]{1}$/.test(form.panNo))
       e.panNo = 'PAN should be 10 valid characters (e.g., ABCDE1234F)';
 
-    // Discount Rate is mandatory if Discount Base is provided
     if (form.billDiscountBase) {
       if (
         !form.billDiscountRate ||
@@ -181,13 +179,17 @@ export default function UpdateProfileScreen() {
         parseFloat(form.billDiscountRate) < 0 ||
         parseFloat(form.billDiscountRate) > 100
       )
-        e.billDiscountRate = 'Discount Rate is required and should be between 0-100%';
+        e.billDiscountRate =
+          'Discount Rate is required and should be between 0-100%';
     } else {
-        // If billDiscountBase is not set, billDiscountRate is optional,
-        // but if provided, it should still be valid.
-        if (form.billDiscountRate && (isNaN(form.billDiscountRate) || parseFloat(form.billDiscountRate) < 0 || parseFloat(form.billDiscountRate) > 100)) {
-            e.billDiscountRate = 'Discount Rate should be between 0-100%';
-        }
+      if (
+        form.billDiscountRate &&
+        (isNaN(form.billDiscountRate) ||
+          parseFloat(form.billDiscountRate) < 0 ||
+          parseFloat(form.billDiscountRate) > 100)
+      ) {
+        e.billDiscountRate = 'Discount Rate should be between 0-100%';
+      }
     }
 
     setErrors(e);
@@ -203,7 +205,7 @@ export default function UpdateProfileScreen() {
         quality: 0.8,
         selectionLimit: 1,
       },
-      (response) => {
+      response => {
         if (response.didCancel) return;
         if (response.errorCode) {
           alert('ImagePicker Error: ' + response.errorMessage);
@@ -211,15 +213,14 @@ export default function UpdateProfileScreen() {
           const asset = response.assets[0];
           setForm({ ...form, logo: asset.uri });
         }
-      }
+      },
     );
   };
 
   const handleChange = (k, v) => {
-    setForm((prevForm) => {
+    setForm(prevForm => {
       const newForm = { ...prevForm, [k]: v };
 
-      // Reset GST-related fields if hasGst is toggled off
       if (k === 'hasGst' && v === false) {
         newForm.gstin = '';
         newForm.gstStateCode = '';
@@ -228,32 +229,98 @@ export default function UpdateProfileScreen() {
         newForm.gstRate = '';
         newForm.customGstRate = '';
       }
-      // Reset GST Rate and customGstRate if gstBillingType changes to something other than 'Excluding GST'
-      if (k === 'gstBillingType' && v !== 3) { // 3 is 'Excluding GST'
-          newForm.gstRate = '';
-          newForm.customGstRate = '';
+      if (k === 'gstBillingType' && v !== 3) {
+        newForm.gstRate = '';
+        newForm.customGstRate = '';
       }
-      // Reset customGstRate if gstRate changes to something other than 'Other'
       if (k === 'gstRate' && v !== 'Other') {
-          newForm.customGstRate = '';
+        newForm.customGstRate = '';
       }
       return newForm;
     });
   };
 
-  const handleSubmit = () => {
+  // --- REWRITE handleSubmit as per instructions ---
+  const handleSubmit = async () => {
     if (validate()) {
       setSubmitting(true);
-      setTimeout(() => {
-        // Here you would typically send the form data to your backend
-        alert('Profile Updated:\n' + JSON.stringify(form, null, 2));
+
+      // Prepare API payload, flatten fields where naming is different if necessary.
+      // Handle optional field values or convert as needed by saveUserProfileApi.
+      const payload = {
+        user_id: userId || form.userId || 0,
+        owner_name: form.ownerName,
+        owner_mobile: form.ownerMobile,
+        owner_email: form.ownerEmail,
+        business_type: form.businessType,
+        has_gst: form.hasGst, // if API expects this, or omit if not needed
+        gstin: form.gstin,
+        gst_state_code: form.gstStateCode,
+        gst_reg_type: form.gstRegType,
+        gst_billing_type: form.gstBillingType,
+        gst_rate: form.gstRate,
+        custom_gst_rate: form.customGstRate,
+        pan_no: form.panNo,
+        trade_license_no: form.tradeLicenseNo,
+        shop_name: form.shopName,
+        shop_address: form.shopAddress,
+        billing_mobile: form.billingMobile,
+        bill_discount_base: form.billDiscountBase,
+        bill_discount_rate: form.billDiscountRate,
+        logo: form.logo,
+      };
+
+      try {
+        const response = await saveUserProfileApi(payload);
+        if (response?.status === 0) {
+          setSubmitting(false);
+          Alert.alert(
+            'Profile Updated',
+            'Your profile information has been saved.',
+          );
+          setErrors({});
+        } else {
+          Alert.alert(
+            'Profile Not Updated',
+            'Something went Wrong.Please Try again.',
+          );
+        }
+      } catch (err) {
         setSubmitting(false);
-      }, 1000);
+
+        if (err?.code === 401) {
+          Alert.alert(
+            'Unauthorised',
+            'Your session has expired. Please login again.',
+            [
+              {
+                text: 'OK',
+                onPress: async () => {
+                  await logout();
+                },
+              },
+            ],
+            { cancelable: false },
+          );
+        } else {
+          Alert.alert(
+            'Something Went Wrong',
+            err?.message + 'Please try again later.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {},
+              },
+            ],
+            { cancelable: true },
+          );
+        }
+      }
     }
   };
 
   const handleReset = () => {
-    setForm((f) => ({
+    setForm(f => ({
       ...f,
       ownerName: '',
       ownerMobile: userMobile || '',
@@ -283,12 +350,12 @@ export default function UpdateProfileScreen() {
       open: true,
       options,
       key,
-      onChange: (v) => {
-        setSelectModal((modal) => ({ ...modal, open: false }));
+      onChange: v => {
+        setSelectModal(modal => ({ ...modal, open: false }));
         handleChange(key, v);
       },
-      display: options.find((o) => o.value === form[key])?.label || '',
-      title: label, // Pass label to modal for dynamic title
+      display: options.find(o => o.value === form[key])?.label || '',
+      title: label,
     });
   };
 
@@ -296,10 +363,6 @@ export default function UpdateProfileScreen() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.container}>
-        {/* Header */}
-        {/* Removed header as it was commented out in the original code,
-            but can be added back if needed */}
-
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -314,7 +377,7 @@ export default function UpdateProfileScreen() {
             <CustomInput
               label="Owner Name"
               value={form.ownerName}
-              onChangeText={(v) => handleChange('ownerName', v)}
+              onChangeText={v => handleChange('ownerName', v)}
               icon={fieldIcons.ownerName}
               placeholder="Enter full name"
               error={errors.ownerName}
@@ -324,7 +387,7 @@ export default function UpdateProfileScreen() {
               <CustomInput
                 label="Mobile Number"
                 value={form.ownerMobile}
-                onChangeText={(v) =>
+                onChangeText={v =>
                   handleChange('ownerMobile', v.replace(/[^0-9]/g, ''))
                 }
                 icon={fieldIcons.ownerMobile}
@@ -338,7 +401,7 @@ export default function UpdateProfileScreen() {
               <CustomInput
                 label="Email ID"
                 value={form.ownerEmail}
-                onChangeText={(v) => handleChange('ownerEmail', v)}
+                onChangeText={v => handleChange('ownerEmail', v)}
                 icon={fieldIcons.ownerEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -358,10 +421,12 @@ export default function UpdateProfileScreen() {
             <CustomSelect
               label="Business Type"
               value={form.businessType}
-              onPress={() => openSelect('businessType', BUSINESSES, 'Select Business Type')}
+              onPress={() =>
+                openSelect('businessType', BUSINESSES, 'Select Business Type')
+              }
               options={BUSINESSES}
               display={
-                BUSINESSES.find((o) => o.value === form.businessType)?.label
+                BUSINESSES.find(o => o.value === form.businessType)?.label
               }
               icon={fieldIcons.businessType}
               error={errors.businessType}
@@ -376,7 +441,7 @@ export default function UpdateProfileScreen() {
                   trackColor={{ false: '#767577', true: '#FF6347' }}
                   thumbColor={form.hasGst ? '#F8F8F8' : '#f4f3f4'}
                   ios_backgroundColor="#3e3e3e"
-                  onValueChange={(v) => handleChange('hasGst', v)}
+                  onValueChange={v => handleChange('hasGst', v)}
                   value={form.hasGst}
                 />
               </View>
@@ -385,46 +450,60 @@ export default function UpdateProfileScreen() {
             {form.hasGst && (
               <>
                 <CustomSelect
-                  label="GST Billing Type" // Renamed label
+                  label="GST Billing Type"
                   value={form.gstBillingType}
-                  onPress={() => openSelect('gstBillingType', GST_BILLING_TYPES, 'Select GST Billing Type')}
+                  onPress={() =>
+                    openSelect(
+                      'gstBillingType',
+                      GST_BILLING_TYPES,
+                      'Select GST Billing Type',
+                    )
+                  }
                   options={GST_BILLING_TYPES}
                   display={
-                    GST_BILLING_TYPES.find((o) => o.value === form.gstBillingType)?.label
+                    GST_BILLING_TYPES.find(o => o.value === form.gstBillingType)
+                      ?.label
                   }
                   icon={fieldIcons.gstBillingType}
                   error={errors.gstBillingType}
-                  required // Mandatory if hasGst is true
+                  required
                 />
-                {form.gstBillingType === 3 && ( // 3 is 'Excluding GST'
+                {form.gstBillingType === 3 && (
                   <>
                     <View style={styles.formRow}>
-                        <CustomSelect
-                            label="GST Rate"
-                            value={form.gstRate}
-                            onPress={() => openSelect('gstRate', GST_RATES, 'Select GST Rate')}
-                            options={GST_RATES}
-                            display={
-                                GST_RATES.find((o) => o.value === form.gstRate)?.label
-                            }
-                            icon={fieldIcons.gstRate}
-                            error={errors.gstRate}
-                            half
-                            required // Mandatory if Excluding GST is selected
+                      <CustomSelect
+                        label="GST Rate"
+                        value={form.gstRate}
+                        onPress={() =>
+                          openSelect('gstRate', GST_RATES, 'Select GST Rate')
+                        }
+                        options={GST_RATES}
+                        display={
+                          GST_RATES.find(o => o.value === form.gstRate)?.label
+                        }
+                        icon={fieldIcons.gstRate}
+                        error={errors.gstRate}
+                        half
+                        required
+                      />
+                      {form.gstRate === 'Other' && (
+                        <CustomInput
+                          label="Custom GST Rate (%)"
+                          value={form.customGstRate}
+                          onChangeText={v =>
+                            handleChange(
+                              'customGstRate',
+                              v.replace(/[^0-9.]/g, ''),
+                            )
+                          }
+                          icon={fieldIcons.gstRate}
+                          keyboardType="numeric"
+                          placeholder="e.g. 10.5"
+                          error={errors.customGstRate}
+                          half
+                          required
                         />
-                        {form.gstRate === 'Other' && (
-                            <CustomInput
-                                label="Custom GST Rate (%)"
-                                value={form.customGstRate}
-                                onChangeText={(v) => handleChange('customGstRate', v.replace(/[^0-9.]/g, ''))}
-                                icon={fieldIcons.gstRate}
-                                keyboardType="numeric"
-                                placeholder="e.g. 10.5"
-                                error={errors.customGstRate}
-                                half
-                                required // Mandatory if 'Other' is selected
-                            />
-                        )}
+                      )}
                     </View>
                   </>
                 )}
@@ -432,7 +511,7 @@ export default function UpdateProfileScreen() {
                   <CustomInput
                     label="GSTIN Number"
                     value={form.gstin}
-                    onChangeText={(v) => handleChange('gstin', v.toUpperCase())}
+                    onChangeText={v => handleChange('gstin', v.toUpperCase())}
                     icon={fieldIcons.gstin}
                     maxLength={15}
                     placeholder="15 digit GSTIN"
@@ -443,7 +522,7 @@ export default function UpdateProfileScreen() {
                   <CustomInput
                     label="GST State Code"
                     value={form.gstStateCode}
-                    onChangeText={(v) => handleChange('gstStateCode', v)}
+                    onChangeText={v => handleChange('gstStateCode', v)}
                     icon={fieldIcons.gstStateCode}
                     placeholder="e.g. 22"
                     keyboardType="numeric"
@@ -453,10 +532,16 @@ export default function UpdateProfileScreen() {
                 <CustomSelect
                   label="GST Registration Type"
                   value={form.gstRegType}
-                  onPress={() => openSelect('gstRegType', GST_REGTYPES, 'Select GST Registration Type')}
+                  onPress={() =>
+                    openSelect(
+                      'gstRegType',
+                      GST_REGTYPES,
+                      'Select GST Registration Type',
+                    )
+                  }
                   options={GST_REGTYPES}
                   display={
-                    GST_REGTYPES.find((o) => o.value === form.gstRegType)?.label
+                    GST_REGTYPES.find(o => o.value === form.gstRegType)?.label
                   }
                   icon={fieldIcons.gstRegType}
                 />
@@ -466,7 +551,7 @@ export default function UpdateProfileScreen() {
               <CustomInput
                 label="PAN Number"
                 value={form.panNo}
-                onChangeText={(v) => handleChange('panNo', v.toUpperCase())}
+                onChangeText={v => handleChange('panNo', v.toUpperCase())}
                 icon={fieldIcons.panNo}
                 maxLength={10}
                 placeholder="ABCDE1234F"
@@ -477,7 +562,7 @@ export default function UpdateProfileScreen() {
               <CustomInput
                 label="Trade License No."
                 value={form.tradeLicenseNo}
-                onChangeText={(v) => handleChange('tradeLicenseNo', v)}
+                onChangeText={v => handleChange('tradeLicenseNo', v)}
                 icon={fieldIcons.tradeLicenseNo}
                 placeholder="License number"
                 half
@@ -494,7 +579,7 @@ export default function UpdateProfileScreen() {
             <CustomInput
               label="Shop Name"
               value={form.shopName}
-              onChangeText={(v) => handleChange('shopName', v)}
+              onChangeText={v => handleChange('shopName', v)}
               icon={fieldIcons.shopName}
               placeholder="Your shop name"
               error={errors.shopName}
@@ -503,18 +588,17 @@ export default function UpdateProfileScreen() {
             <CustomInput
               label="Shop Address"
               value={form.shopAddress}
-              onChangeText={(v) => handleChange('shopAddress', v)}
+              onChangeText={v => handleChange('shopAddress', v)}
               icon={fieldIcons.shopAddress}
               placeholder="Full address with city, pin"
-              error={errors.shopAddress} // Still show error if invalid, but not for emptiness
+              error={errors.shopAddress}
               multiline
               textareaStyle={styles.textarea}
-              // required removed as per new logic
             />
             <CustomInput
               label="Billing Mobile No."
               value={form.billingMobile}
-              onChangeText={(v) =>
+              onChangeText={v =>
                 handleChange('billingMobile', v.replace(/[^0-9]/g, ''))
               }
               icon={fieldIcons.billingMobile}
@@ -522,7 +606,7 @@ export default function UpdateProfileScreen() {
               keyboardType="phone-pad"
               maxLength={15}
               error={errors.billingMobile}
-              required // Now mandatory
+              required
             />
             <View style={styles.formGroup}>
               <Text style={styles.label}>Shop Logo (Optional)</Text>
@@ -540,7 +624,10 @@ export default function UpdateProfileScreen() {
               </TouchableOpacity>
               {form.logo && (
                 <View style={styles.logoPreviewContainer}>
-                  <Image source={{ uri: form.logo }} style={styles.logoPreview} />
+                  <Image
+                    source={{ uri: form.logo }}
+                    style={styles.logoPreview}
+                  />
                 </View>
               )}
             </View>
@@ -555,27 +642,30 @@ export default function UpdateProfileScreen() {
             <CustomSelect
               label="Bill Discount Base Price (Optional)"
               value={form.billDiscountBase}
-              onPress={() => openSelect('billDiscountBase', DISC_BASE, 'Select Discount Base')}
+              onPress={() =>
+                openSelect(
+                  'billDiscountBase',
+                  DISC_BASE,
+                  'Select Discount Base',
+                )
+              }
               options={DISC_BASE}
               display={
-                DISC_BASE.find((o) => o.value === form.billDiscountBase)
-                  ?.label
+                DISC_BASE.find(o => o.value === form.billDiscountBase)?.label
               }
               icon={fieldIcons.billDiscountBase}
               error={errors.billDiscountBase}
-              // required removed, now optional
             />
             <CustomInput
               label="Bill Discount Rate (Mandatory if Discount Base is set)"
               value={form.billDiscountRate}
-              onChangeText={(v) =>
+              onChangeText={v =>
                 handleChange('billDiscountRate', v.replace(/[^0-9.]/g, ''))
               }
               icon={fieldIcons.billDiscountRate}
               placeholder="0-100%"
               keyboardType="numeric"
               error={errors.billDiscountRate}
-              // required removed, now conditional based on billDiscountBase
             />
           </View>
 
@@ -603,7 +693,10 @@ export default function UpdateProfileScreen() {
               <Text style={styles.resetButtonText}>Reset</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.saveButton, submitting && styles.saveButtonDisabled]}
+              style={[
+                styles.saveButton,
+                submitting && styles.saveButtonDisabled,
+              ]}
               onPress={handleSubmit}
               disabled={submitting}
               activeOpacity={0.8}
@@ -621,11 +714,11 @@ export default function UpdateProfileScreen() {
         visible={selectModal.open}
         options={selectModal.options}
         value={form[selectModal.key]}
-        onSelect={(v) => {
+        onSelect={v => {
           selectModal.onChange && selectModal.onChange(v);
         }}
-        onRequestClose={() => setSelectModal((m) => ({ ...m, open: false }))}
-        title={selectModal.title || 'Select Option'} // Pass title to modal
+        onRequestClose={() => setSelectModal(m => ({ ...m, open: false }))}
+        title={selectModal.title || 'Select Option'}
       />
     </SafeAreaView>
   );
@@ -706,7 +799,14 @@ const CustomSelect = ({
   </View>
 );
 
-const SelectModal = ({ visible, options, value, onSelect, onRequestClose, title }) => (
+const SelectModal = ({
+  visible,
+  options,
+  value,
+  onSelect,
+  onRequestClose,
+  title,
+}) => (
   <Modal
     visible={visible}
     transparent
@@ -719,7 +819,7 @@ const SelectModal = ({ visible, options, value, onSelect, onRequestClose, title 
         <Text style={styles.modalTitle}>{title}</Text>
         <FlatList
           data={options}
-          keyExtractor={(o) => (o.value ? o.value.toString() : o.label)}
+          keyExtractor={o => (o.value ? o.value.toString() : o.label)}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
@@ -737,9 +837,7 @@ const SelectModal = ({ visible, options, value, onSelect, onRequestClose, title 
               >
                 {item.label}
               </Text>
-              {value === item.value && (
-                <View style={styles.modalCheckmark} />
-              )}
+              {value === item.value && <View style={styles.modalCheckmark} />}
             </TouchableOpacity>
           )}
           showsVerticalScrollIndicator={false}

@@ -27,6 +27,7 @@ export const AuthProvider = ({ children }) => {
   const [userToken, setUserToken] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [userName, setUserName] = useState(null);
+  const [userID, setUserID] = useState(null);
   const [isLoading, setIsLoading] = useState(false); // True only for login/logout progress
   const [isAuthInitializing, setIsAuthInitializing] = useState(true); // True for initial app boot splash
 
@@ -35,19 +36,28 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     try {
       const response = await loginUserApi(phone, password);
-      const { token, role, username } = response.data;
-      await AsyncStorage.setItem('userToken', token);
-      await AsyncStorage.setItem('userRole', role);
-      await AsyncStorage.setItem('userName', username);
+
+      const { token, user } = response?.data || {};
+
+      const { userRole: role, userId, userName: username } = user || {};
+
+      await AsyncStorage.setItem('userToken', token );
+      await AsyncStorage.setItem('userRole', role );
+      await AsyncStorage.setItem('userName', username );
+      await AsyncStorage.setItem('userID', String(userId));
+
       setUserToken(token);
       setUserRole(role);
       setUserName(username);
+      setUserID(String(userId));
+      
       return { success: true };
     } catch (e) {
       console.error('Login failed:', e.response?.data?.message || e.message);
       setUserToken(null);
       setUserRole(null);
       setUserName(null);
+      setUserID(null);
       return {
         success: false,
         error: e.response?.data?.message || 'Something went wrong. Please check your network or credentials.'
@@ -61,11 +71,14 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     try {
       await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userRole');
-      await AsyncStorage.removeItem('userName');
+        await AsyncStorage.removeItem('userRole');
+        await AsyncStorage.removeItem('userName');
+        await AsyncStorage.removeItem('userID');
       setUserToken(null);
       setUserRole(null);
       setUserName(null);
+      setUserID(null);  
+
       // No in-context alert here
     } catch (e) {
       console.error('Logout failed:', e);
@@ -80,12 +93,14 @@ export const AuthProvider = ({ children }) => {
       let storedToken = null;
       let storedRole = null;
       let storedUserName = null;
+      let storeUserId = null;
       try {
         await Promise.all([
           (async () => {
             storedToken = await AsyncStorage.getItem('userToken');
             storedRole = await AsyncStorage.getItem('userRole');
             storedUserName = await AsyncStorage.getItem('userName');
+            storeUserId = await AsyncStorage.getItem('userID');
           })(),
           minimumSplashTime
         ]);
@@ -93,6 +108,7 @@ export const AuthProvider = ({ children }) => {
           setUserToken(storedToken);
           setUserRole(storedRole);
           setUserName(storedUserName);
+          setUserID(storeUserId);
         }
       } catch (e) {
         console.error('Failed to restore session or minimum splash time interrupted:', e);
@@ -104,8 +120,8 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ userToken, userRole, userName, isLoading, isAuthInitializing, login, logout }}>
+    <AuthContext.Provider value={{ userToken, userRole, userName, isLoading, isAuthInitializing, login, logout,userID }}>
       {children}
-    </AuthContext.Provider>
+    </AuthContext.Provider> 
   );
 };
